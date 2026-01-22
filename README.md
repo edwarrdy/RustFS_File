@@ -103,8 +103,8 @@ npm start
 
 | 接口                    | 方法 | 描述               | Body 参数                                                                      |
 | ----------------------- | ---- | ------------------ | ------------------------------------------------------------------------------ |
-| `/upload`               | POST | **Mode A (中转)**  | `multipart/form-data`（`file`: 二进制文件）                                    |
-| `/presigned/upload-url` | POST | **Mode B (第1步)** | `{ "filename": "a.mp4", "mimetype": "video/mp4" }`                             |
+| `/upload`               | POST | **Mode A (中转)**  | `multipart/form-data`（`file`: 二进制文件）|
+| `/presigned/upload-url` | POST | **Mode B (第1步)** | `{ "filename": "a.mp4", "mimetype": "video/mp4" }` |
 | `/presigned/callback`   | POST | **Mode B (第2步)** | `{ "key": "uuid...", "originalName": "...", "size": 1024, "mimetype": "..." }` |
 
 ---
