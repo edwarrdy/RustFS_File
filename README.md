@@ -105,28 +105,18 @@ npm start
 
 ### 1. 上传接口
 
-| 接口      | 方法 | 描述                   | Body 参数 |
-| --------- | ---- | ---------------------- | --------- |
-| `/upload` | POST | **Mode A (中转)** <br> |
-
-<br> `multipart/form-data` | `file`: (二进制文件) |
-| `/presigned/upload-url` | POST | **Mode B (第1步)** <br>
-
-<br> 获取上传签名 URL | `{ "filename": "a.mp4", "mimetype": "video/mp4" }` |
-| `/presigned/callback` | POST | **Mode B (第3步)** <br>
-
-<br> 前端上传完成后回调 | `{ "key": "uuid...", "originalName": "...", "size": 1024, "mimetype": "..." }` |
+| 接口                    | 方法 | 描述               | Body 参数             |
+| ----------------------- | ---- | ------------------ | --------------------- | ------------------------------------------------------------------------------ |
+| `/upload`               | POST | **Mode A (中转)**  | `multipart/form-data` | `file`: (二进制文件)                                                           |
+| `/presigned/upload-url` | POST | **Mode B (第1步)** | 获取上传签名 URL      | `{ "filename": "a.mp4", "mimetype": "video/mp4" }`                             |
+| `/presigned/callback`   | POST | **Mode B (第2步)** | 前端上传完成后回调    | `{ "key": "uuid...", "originalName": "...", "size": 1024, "mimetype": "..." }` |
 
 ### 2. 下载接口
 
-| 接口            | 方法 | 描述            | 备注 |
-| --------------- | ---- | --------------- | ---- |
-| `/download/:id` | GET  | **Mode A** <br> |
-
-<br> 流式下载 | 响应头包含 `Content-Disposition` |
-| `/presigned/download/:id` | GET | **Mode B** <br>
-
-<br> 获取临时直链 | 返回 `{ "url": "http://rustfs...", "filename": "..." }` |
+| 接口                      | 方法 | 描述       | 备注         |
+| ------------------------- | ---- | ---------- | ------------ | ------------------------------------------------------- |
+| `/download/:id`           | GET  | **Mode A** | 流式下载     | 响应头包含 `Content-Disposition`                        |
+| `/presigned/download/:id` | GET  | **Mode B** | 获取临时直链 | 返回 `{ "url": "http://rustfs...", "filename": "..." }` |
 
 ### 3. 管理接口
 
