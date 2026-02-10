@@ -3,241 +3,265 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RustFS 文件服务器 (Full Features)</title>
+    <title>RustFS 智能云盘</title>
     <style>
-        :root { --primary: #2563eb; --bg: #f1f5f9; --card: #ffffff; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: #334155; max-width: 900px; margin: 30px auto; padding: 20px; }
-        .card { background: var(--card); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 24px; }
-        h1 { color: #0f172a; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
-        h3 { margin-top: 0; color: #334155; }
+        :root { --primary: #2563eb; --bg: #f8fafc; --card: #ffffff; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: #334155; max-width: 1000px; margin: 30px auto; padding: 20px; }
+        .card { background: var(--card); border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 24px; }
         
+        /* 面包屑样式 */
+        .breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 14px; background: white; padding: 10px 15px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .breadcrumb-item { color: var(--primary); cursor: pointer; font-weight: 500; }
+        .breadcrumb-item:hover { text-decoration: underline; }
+        .breadcrumb-separator { color: #94a3b8; }
+
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         
-        .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: 0.2s; font-weight: 500;}
-        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); }
-        .btn:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-success { background: #10b981; color: white; }
+        .btn { background: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn:hover { filter: brightness(1.1); }
+        .btn-danger { background: #ef4444; }
         .btn-outline { background: white; border: 1px solid #cbd5e1; color: #475569; }
-        .btn-outline:hover { background: #f8fafc; }
 
-        input[type="file"] { margin: 10px 0; display: block; width: 100%; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #64748b; font-size: 13px; }
+        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
         
-        table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
-        th { text-align: left; padding: 12px; background: #f8fafc; border-bottom: 2px solid #e2e8f0; font-size: 14px; color: #64748b; }
-        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-        
-        .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e0f2fe; color: #0369a1; font-family: monospace; }
-        
-        #progressBarParent { height: 8px; background: #e2e8f0; border-radius: 4px; margin-top: 15px; overflow: hidden; display: none; }
-        #progressBar { height: 100%; background: #2563eb; width: 0%; transition: width 0.1s linear; }
-        
-        .log-area { font-family: 'Consolas', monospace; font-size: 12px; background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px; height: 200px; overflow-y: auto; line-height: 1.5; }
-        .log-entry { border-bottom: 1px solid #334155; padding: 2px 0; }
-        .success { color: #4ade80; } .error { color: #f87171; } .warn { color: #facc15; }
+        /* 文件夹与文件图标颜色 */
+        .icon-folder { color: #facc15; font-size: 18px; margin-right: 8px; }
+        .icon-file { color: #94a3b8; font-size: 18px; margin-right: 8px; }
+        .clickable { cursor: pointer; color: var(--primary); font-weight: 500; }
+
+        .log-area { font-family: monospace; font-size: 12px; background: #1e293b; color: #cbd5e1; padding: 15px; border-radius: 8px; height: 150px; overflow-y: auto; margin-top: 20px; }
+        #progressBarParent { height: 6px; background: #e2e8f0; border-radius: 3px; margin-top: 10px; display: none; }
+        #progressBar { height: 100%; background: var(--primary); width: 0%; transition: 0.3s; }
     </style>
 </head>
 <body>
 
-    <h1>🚀 RustFS Node.js 控制台</h1>
+    <h1>🚀 RustFS 智能云盘</h1>
 
-    <div class="grid">
-        <div class="card">
-            <h3>📦 普通上传 (Mode A)</h3>
-            <p style="font-size:13px; color:#64748b;">流量经过 Node.js 服务器。<br>适合小文件或需要后端处理文件的场景。</p>
-            <input type="file" id="fileInputA">
-            <button class="btn btn-outline" onclick="uploadModeA()">Node 中转上传</button>
-        </div>
-
-        <div class="card" style="border: 2px solid #e0f2fe;">
-            <h3>⚡ 极速直传 (Mode B)</h3>
-            <p style="font-size:13px; color:#64748b;">前端直接对接 RustFS。<br>适合大文件，不占用服务器带宽。</p>
-            <input type="file" id="fileInputB">
-            <div id="progressBarParent"><div id="progressBar"></div></div>
-            <button class="btn btn-success" id="btnB" onclick="uploadModeB()" style="margin-top:10px; width:100%">🚀 开始直传</button>
-        </div>
+    <div class="breadcrumb" id="breadcrumb">
+        <span class="breadcrumb-item">全部文件</span>
     </div>
 
+    <div class="toolbar">
+        <button class="btn" onclick="document.getElementById('fileInputA').click()">📄 中转上传</button>
+        <button class="btn btn-outline" onclick="document.getElementById('fileInputB').click()">⚡ 极速直传</button>
+        <button class="btn btn-outline" onclick="promptCreateFolder()">📁 新建文件夹</button>
+        <input type="file" id="fileInputA" hidden onchange="uploadModeA()">
+        <input type="file" id="fileInputB" hidden onchange="uploadModeB()">
+    </div>
+
+    <div id="progressBarParent"><div id="progressBar"></div></div>
+
     <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h3>📂 云端文件列表</h3>
-            <button class="btn btn-outline" onclick="loadFiles()">🔄 刷新</button>
-        </div>
         <table>
             <thead>
                 <tr>
-                    <th style="width: 50px">ID</th>
-                    <th>文件名</th>
-                    <th style="width: 100px">大小</th>
-                    <th style="width: 260px">操作</th>
+                    <th>名称</th>
+                    <th style="width: 120px">大小</th>
+                    <th style="width: 300px">操作</th>
                 </tr>
             </thead>
-            <tbody id="fileList"></tbody>
+            <tbody id="contentList">
+                </tbody>
         </table>
     </div>
 
-    <div class="log-area" id="logArea">
-        <div class="log-entry">系统就绪，等待操作...</div>
-    </div>
+    <div class="log-area" id="logArea"></div>
 
     <script>
         const API_BASE = 'http://localhost:3000/files';
+        let currentFolderUuid = 'root'; // 当前目录 ID
 
         function log(msg, type = '') {
             const area = document.getElementById('logArea');
             const div = document.createElement('div');
-            div.className = `log-entry ${type}`;
-            div.innerHTML = `<span style="opacity:0.5">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+            div.style.color = type === 'error' ? '#f87171' : (type === 'success' ? '#4ade80' : '#cbd5e1');
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
             area.insertBefore(div, area.firstChild);
         }
 
-        function formatSize(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        // --- 核心：加载目录内容 ---
+        async function loadContent(uuid = 'root') {
+            currentFolderUuid = uuid;
+            try {
+                // 1. 获取文件和文件夹
+                const res = await fetch(`${API_BASE}/content?folderUuid=${uuid}`);
+                const { folders, files } = await res.json();
+                
+                // 2. 获取面包屑
+                const bcRes = await fetch(`${API_BASE}/breadcrumbs?folderUuid=${uuid}`);
+                const bcData = await bcRes.json();
+                renderBreadcrumbs(bcData);
+
+                // 3. 渲染列表
+                const list = document.getElementById('contentList');
+                let html = '';
+
+                // 渲染文件夹
+                folders.forEach(f => {
+                    html += `
+                        <tr>
+                            <td class="clickable" onclick="loadContent('${f.uuid}')">
+                                <span class="icon-folder">📁</span> ${f.displayName}
+                            </td>
+                            <td>-</td>
+                            <td>
+                                <button class="btn btn-outline" style="padding:4px 8px" onclick="deleteFolder('${f.uuid}')">🗑 删除</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                // 渲染文件
+                files.forEach(f => {
+                    html += `
+                        <tr>
+                            <td><span class="icon-file">📄</span> ${f.originalName}</td>
+                            <td style="color:#64748b">${formatSize(f.size)}</td>
+                            <td>
+                                <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadModeA(${f.id})">⬇ 普通</button>
+                                <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadModeB(${f.id})">⚡ 加速</button>
+                                <button class="btn btn-danger" style="padding:4px 8px; margin-left:8px" onclick="deleteFile(${f.id})">🗑 删除</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                list.innerHTML = html || '<tr><td colspan="3" style="text-align:center;color:#94a3b8">空空如也</td></tr>';
+            } catch (e) { log('加载失败: ' + e.message, 'error'); }
         }
 
-        // --- 模式 A 上传 ---
+        function renderBreadcrumbs(data) {
+            const container = document.getElementById('breadcrumb');
+            container.innerHTML = data.map((item, index) => `
+                <span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${item.displayName}</span>
+                ${index < data.length - 1 ? '<span class="breadcrumb-separator">/</span>' : ''}
+            `).join('');
+        }
+
+        // --- 文件夹管理 ---
+        async function promptCreateFolder() {
+            const name = prompt("请输入文件夹名称:");
+            if (!name) return;
+            try {
+                const res = await fetch(`${API_BASE}/folders`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, parentId: currentFolderUuid === 'root' ? null : currentFolderUuid })
+                });
+                if (res.ok) {
+                    log(`文件夹 "${name}" 创建成功`, 'success');
+                    loadContent(currentFolderUuid);
+                }
+            } catch (e) { log('创建失败', 'error'); }
+        }
+
+        async function deleteFolder(uuid) {
+            if(!confirm('确定递归删除文件夹吗？内部所有文件都将被永久清除！')) return;
+            try {
+                const res = await fetch(`${API_BASE}/folders/${uuid}`, { method: 'DELETE' });
+                if (res.ok) {
+                    log('文件夹已清理', 'success');
+                    loadContent(currentFolderUuid);
+                }
+            } catch (e) { log('删除失败', 'error'); }
+        }
+
+        // --- 修改后的上传 (Mode A) ---
         async function uploadModeA() {
             const file = document.getElementById('fileInputA').files[0];
-            if (!file) return alert('请选择文件');
-            
+            if (!file) return;
             const fd = new FormData();
             fd.append('file', file);
-            
+            fd.append('folderUuid', currentFolderUuid);
+
             try {
-                log(`[Mode A] 开始上传: ${file.name}`);
+                log(`[Mode A] 正在上传至当前目录...`);
                 const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
-                const json = await res.json();
-                if(!res.ok) throw new Error(json.error);
-                
-                log(`✅ 上传成功 (ID: ${json.data.id})`, 'success');
-                loadFiles();
-            } catch (e) { log(`❌ 失败: ${e.message}`, 'error'); }
+                if (res.ok) {
+                    log('上传成功', 'success');
+                    loadContent(currentFolderUuid);
+                }
+            } catch (e) { log('上传错误', 'error'); }
         }
 
-        // --- 模式 B 直传 ---
+        // --- 修改后的上传 (Mode B 直传) ---
         async function uploadModeB() {
             const file = document.getElementById('fileInputB').files[0];
-            if (!file) return alert('请选择文件');
-            
-            const btn = document.getElementById('btnB');
+            if (!file) return;
             const bar = document.getElementById('progressBar');
             const barParent = document.getElementById('progressBarParent');
-            
+
             try {
-                btn.disabled = true;
                 barParent.style.display = 'block';
-                bar.style.width = '0%';
-                
-                log(`[Mode B] 1. 获取签名 URL...`);
+                log(`[Mode B] 申请加速通道...`);
                 const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ filename: file.name, mimetype: file.type || 'application/octet-stream' })
-                });
-                const signData = await signRes.json();
-                if(!signRes.ok) throw new Error('签名获取失败');
-
-                log(`[Mode B] 2. 直传 RustFS...`);
-                await new Promise((resolve, reject) => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('PUT', signData.uploadUrl);
-                    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-                    xhr.upload.onprogress = e => {
-                        if(e.lengthComputable) bar.style.width = (e.loaded/e.total*100) + '%';
-                    };
-                    xhr.onload = () => xhr.status < 300 ? resolve() : reject(`RustFS error ${xhr.status}`);
-                    xhr.onerror = () => reject('网络中断');
-                    xhr.send(file);
-                });
-
-                log(`[Mode B] 3. 保存元数据...`);
-                await fetch(`${API_BASE}/presigned/callback`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        key: signData.key,
-                        originalName: file.name,
+                    body: JSON.stringify({ 
+                        filename: file.name, 
                         mimetype: file.type || 'application/octet-stream',
-                        size: file.size
+                        folderUuid: currentFolderUuid 
                     })
                 });
+                const signData = await signRes.json();
 
-                log(`✅ 直传流程完成!`, 'success');
-                loadFiles();
-            } catch (e) {
-                log(`❌ 直传失败: ${e}`, 'error');
-            } finally {
-                btn.disabled = false;
-                setTimeout(() => barParent.style.display = 'none', 1000);
-            }
+                log(`[Mode B] 正在直传至 RustFS...`);
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', signData.uploadUrl);
+                xhr.upload.onprogress = e => {
+                    if(e.lengthComputable) bar.style.width = (e.loaded/e.total*100) + '%';
+                };
+                
+                xhr.onload = async () => {
+                    if (xhr.status < 300) {
+                        log(`[Mode B] 同步元数据...`);
+                        await fetch(`${API_BASE}/presigned/callback`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                key: signData.key,
+                                originalName: file.name,
+                                mimetype: file.type || 'application/octet-stream',
+                                size: file.size,
+                                folderUuid: currentFolderUuid
+                            })
+                        });
+                        log('直传成功', 'success');
+                        loadContent(currentFolderUuid);
+                    }
+                };
+                xhr.send(file);
+            } catch (e) { log('直传失败', 'error'); }
+            finally { setTimeout(() => barParent.style.display = 'none', 2000); }
         }
 
-        // --- 核心：下载与删除 ---
-        function downloadModeA(id) {
-            log(`⬇ 正在请求普通下载 (ID:${id})...`);
-            // 直接由浏览器导航，触发下载
-            window.location.href = `${API_BASE}/download/${id}`;
-        }
-
-        async function downloadModeB(id) {
-            try {
-                log(`⚡ 正在获取加速链接 (ID:${id})...`);
-                const res = await fetch(`${API_BASE}/presigned/download/${id}`);
-                const data = await res.json();
-                if(!res.ok) throw new Error(data.error);
-
-                log(`🔗 连接获取成功，打开下载...`, 'success');
-                // 打开新窗口下载
-                window.open(data.url, '_blank');
-            } catch (e) {
-                log(`❌ 加速下载失败: ${e.message}`, 'error');
-            }
+        // --- 通用功能 ---
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
         }
 
         async function deleteFile(id) {
-            if(!confirm('确定删除吗？文件将不可恢复。')) return;
-            try {
-                log(`🗑 正在删除 (ID:${id})...`);
-                const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
-                if(res.ok) {
-                    log(`✅ 删除成功`, 'success');
-                    loadFiles();
-                } else {
-                    throw new Error('服务器返回错误');
-                }
-            } catch (e) {
-                log(`❌ 删除失败: ${e.message}`, 'error');
-            }
+            if(!confirm('确定删除文件吗？')) return;
+            const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+            if (res.ok) { log('文件已删除', 'success'); loadContent(currentFolderUuid); }
         }
 
-        async function loadFiles() {
-            try {
-                const res = await fetch(API_BASE);
-                const files = await res.json();
-                const html = files.map(f => `
-                    <tr>
-                        <td><span class="tag">#${f.id}</span></td>
-                        <td><strong>${f.originalName}</strong></td>
-                        <td style="color:#64748b">${formatSize(f.size)}</td>
-                        <td>
-                            <button class="btn btn-outline" style="font-size:12px; padding:4px 8px;" onclick="downloadModeA(${f.id})">⬇ 普通</button>
-                            <button class="btn btn-success" style="font-size:12px; padding:4px 8px;" onclick="downloadModeB(${f.id})">⚡ 加速</button>
-                            <button class="btn btn-danger" style="font-size:12px; padding:4px 8px; margin-left:10px" onclick="deleteFile(${f.id})">🗑 删除</button>
-                        </td>
-                    </tr>
-                `).join('');
-                document.getElementById('fileList').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding:20px">暂无文件</td></tr>';
-            } catch (e) {
-                log(`列表加载失败: ${e.message}`, 'error');
-            }
+        function downloadModeA(id) { window.location.href = `${API_BASE}/download/${id}`; }
+
+        async function downloadModeB(id) {
+            const res = await fetch(`${API_BASE}/presigned/download/${id}`);
+            const data = await res.json();
+            window.open(data.url, '_blank');
         }
 
-        loadFiles();
+        // 初始化加载根目录
+        loadContent('root');
     </script>
 </body>
 </html>

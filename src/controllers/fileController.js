@@ -1,34 +1,53 @@
 const fileService = require("../services/fileService");
 
+// --- 文件夹管理 ---
+
+// 创建文件夹
+exports.createFolder = async (req, res) => {
+  try {
+    const { name, parentId } = req.body;
+    if (!name) return res.status(400).json({ error: "文件夹名称不能为空" });
+
+    const folder = await fileService.createFolder(name, parentId);
+    res.status(201).json(folder);
+  } catch (error) {
+    res.status(500).json({ error: "创建文件夹失败" });
+  }
+};
+
+// 获取目录内容 (同时返回文件夹和文件)
+exports.getContent = async (req, res) => {
+  try {
+    const { folderUuid } = req.query; // 根目录传 null 或不传
+    const content = await fileService.getFolderContent(folderUuid);
+    res.json(content);
+  } catch (error) {
+    res.status(500).json({ error: "获取目录内容失败" });
+  }
+};
+
+// 递归删除文件夹
+exports.removeFolder = async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const result = await fileService.deleteFolder(uuid);
+    res.json({ message: "文件夹及其子内容已彻底删除", data: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "删除文件夹失败" });
+  }
+};
+
 // --- 模式 A: 服务器中转 ---
 exports.upload = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "请选择文件" });
-    const result = await fileService.uploadFileViaServer(req.file);
+
+    const { folderUuid } = req.body;
+    const result = await fileService.uploadFileViaServer(req.file, folderUuid);
     res.status(201).json({ message: "上传成功", data: result });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "上传失败" });
-  }
-};
-
-exports.downloadStream = async (req, res) => {
-  try {
-    const { stream, meta } = await fileService.getDownloadStream(
-      parseInt(req.params.id),
-    );
-    res.setHeader("Content-Type", meta.mimetype);
-    // 使用 RFC 5987 标准格式，防止中文乱码
-    const encodedName = encodeURIComponent(meta.originalName);
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename*=UTF-8''${encodedName}`,
-    );
-    stream.pipe(res);
-  } catch (error) {
-    if (error.message.includes("NOT_FOUND"))
-      return res.status(404).json({ error: "文件未找到" });
-    res.status(500).json({ error: "下载失败" });
   }
 };
 
@@ -52,6 +71,7 @@ exports.getUploadUrl = async (req, res) => {
 exports.uploadCallback = async (req, res) => {
   try {
     // key(uuid), originalName, mimetype, size
+    // req.body 应包含: key, originalName, mimetype, size, folderUuid
     const result = await fileService.saveFileMetadata(req.body);
     res.status(201).json({ message: "元数据保存成功", data: result });
   } catch (error) {
@@ -82,15 +102,16 @@ exports.downloadStream = async (req, res) => {
     );
     // 设置强制下载头
     res.setHeader("Content-Type", meta.mimetype);
+    const encodedName = encodeURIComponent(meta.originalName);
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(meta.originalName)}"`,
+      `attachment; filename*=UTF-8''${encodedName}`,
     );
     stream.pipe(res);
   } catch (error) {
     if (error.message.includes("NOT_FOUND"))
       return res.status(404).send("文件不存在");
-    res.status(500).send("下载出错");
+    res.status(500).send("下载失败");
   }
 };
 
@@ -104,5 +125,21 @@ exports.getDownloadUrl = async (req, res) => {
     res.json({ url, filename });
   } catch (error) {
     res.status(500).json({ error: "获取链接失败" });
+  }
+};
+
+exports.getBreadcrumbs = async (req, res) => {
+  try {
+    const { folderUuid } = req.query;
+    
+    // 如果没有 uuid，直接返回根目录面包屑
+    if (!folderUuid || folderUuid === 'root') {
+      return res.json([{ uuid: 'root', displayName: '全部文件' }]);
+    }
+
+    const breadcrumbs = await fileService.getBreadcrumbs(folderUuid);
+    res.json(breadcrumbs);
+  } catch (error) {
+    res.status(500).json({ error: "获取面包屑失败" });
   }
 };
