@@ -1,169 +1,111 @@
+
 ---
----
 
-# RustFS Node.js File Server
+# 🚀 RustFS 智能云盘系统 (Node.js 版)
 
-这是一个基于 **Node.js** 的高性能文件服务器中间件，专为 **RustFS** (及其他 S3 兼容对象存储) 设计。
-
-它采用 **Better-SQLite3** 作为元数据存储，**AWS SDK v3** 作为存储客户端，支持 **服务器中转 (Proxy)** 和 **直连 (Presigned URL)** 两种传输模式，完美解决了大文件传输效率与网络抖动问题。
+这是一个专为局域网环境设计的、基于 S3 协议的高性能文件管理系统。它在 RustFS（或 MinIO）的基础上，通过 SQLite 实现了**无限层级的虚拟目录结构**。
 
 ## ✨ 核心特性
 
-- **双模式传输**：
-- 📦 **Mode A (中转)**：流式经过后端，适合小文件、权限控制。
-- ⚡ **Mode B (直传)**：前端直接对接 RustFS，后端仅负责签名。**零带宽消耗**，支持 GB 级大文件。
+* **📂 虚拟层级目录**：采用 `Parent-ID` 树形结构，支持文件夹无限嵌套，前端操作与传统网盘无异。
+* **🔗 UUID 路径隔离**：文件物理路径由 UUID 组成（如 `folder-uuid/file-uuid.ext`），彻底消除重名冲突，重命名文件夹仅需毫秒级（仅修改数据库元数据）。
+* **⚡ 极速双模式传输**：
+* **Mode A (中转)**：流经后端，适合小文件或需要经过 Node.js 逻辑处理的场景。
+* **Mode B (直传)**：后端返回预签名 URL，前端直接对接 RustFS，**零服务器带宽占用**，轻松支持 GB 级大文件。
 
-- **数据一致性**：
-- 🛡️ **原子删除**：严格遵循“先删云端，后删本地”原则，防止出现“假删除”现象。
-- 📄 **元数据管理**：使用 SQLite 记录原始文件名、MIME 类型和大小。
 
-- **用户体验优化**：
-- ⬇️ **智能下载**：自动处理 `Content-Disposition`，确保下载时显示原始文件名（支持中文/特殊字符）。
-- ⏱️ **抗网络抖动**：配置了长超时时间（Socket Timeout），适应大文件操作。
+* **🛡️ 级联递归删除**：删除父文件夹时，自动递归清理所有子文件夹及 S3 中的物理文件。
+* **🧭 面包屑导航**：内置回溯算法，快速生成目录路径链条。
 
-## 🛠️ 技术栈
+---
 
-- **Runtime**: Node.js (Express)
-- **Database**: SQLite (via `better-sqlite3`)
-- **Storage Client**: `@aws-sdk/client-s3` (v3)
-- **Presigner**: `@aws-sdk/s3-request-presigner`
+## 🛠️ 技术架构
 
-## 🚀 快速开始
+* **Runtime**: Node.js 20+
+* **Database**: SQLite (via `better-sqlite3`) - 开启 WAL 模式保证高并发稳定性。
+* **Storage**: AWS SDK v3 (S3 兼容协议)。
 
-### 1. 环境准备
+---
 
-- Node.js v16+
-- RustFS 服务已启动（或 MinIO/S3）
+## 🚀 部署指南
 
-### 2. 安装依赖
-
-```bash
-npm install express multer cors dotenv better-sqlite3
-npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @smithy/node-http-handler
-
-```
-
-### 3. 配置文件 (.env)
-
-在根目录创建 `.env` 文件，填入以下配置：
+### 1. 环境变量配置 (`.env`)
 
 ```env
-# 服务器端口
 PORT=3000
-
-# 数据库路径 (自动创建)
-DATABASE_URL="file:./file-server.db"
-
-# RustFS / S3 配置
-RUSTFS_ENDPOINT="http://192.168.1.100:9000"  # 你的 RustFS 地址
-RUSTFS_REGION="us-east-1"                   # 区域 (RustFS 默认通常可填 us-east-1)
-RUSTFS_ACCESS_KEY="rustfsadmin"             # Access Key
-RUSTFS_SECRET_KEY="rustfssecret"            # Secret Key
-RUSTFS_BUCKET_NAME="my-bucket"              # 存储桶名称
+RUSTFS_ENDPOINT="http://192.168.1.100:9000"
+RUSTFS_REGION="us-east-1"
+RUSTFS_ACCESS_KEY="admin"
+RUSTFS_SECRET_KEY="password"
+RUSTFS_BUCKET_NAME="my-storage"
 
 ```
 
-### 4. 启动服务
+### 2. 数据库说明
 
-```bash
-# 开发模式 (推荐，代码变动自动重启)
-npm install -D nodemon
-npm run dev
-
-# 生产模式
-npm start
-
-```
-
-启动成功后，控制台将输出：
-
-```text
-🚀 Server running on http://localhost:3000
-📂 Database: SQLite (via better-sqlite3)
-☁️  Storage:  RustFS (S3 Compatible)
-[Init] Bucket 'my-bucket' created or verified.
-
-```
-
-## 🧪 前端测试台
-
-项目包含一个单文件 HTML 测试页面，位于根目录（或您创建的） `index.html`。
-双击打开或通过 VS Code Live Server 打开即可进行以下测试：
-
-1. **普通上传**：测试 Mode A 中转能力。
-2. **极速直传**：测试 Mode B 进度条及大文件上传能力。
-3. **下载**：测试文件名是否正确还原。
-4. **删除**：测试 3G+ 大文件的删除一致性。
-
-## 📚 API 文档
-
-### 1. 上传接口
+项目启动后会自动在根目录生成 `file-server.db`。若表结构发生重大变化，建议备份后删除该文件，重启服务即可自动重构。
 
 ---
 
-| 接口                    | 方法 | 描述               | Body 参数                                                                      |
-| ----------------------- | ---- | ------------------ | ------------------------------------------------------------------------------ |
-| `/upload`               | POST | **Mode A (中转)**  | `multipart/form-data`（`file`: 二进制文件）|
-| `/presigned/upload-url` | POST | **Mode B (第1步)** | `{ "filename": "a.mp4", "mimetype": "video/mp4" }` |
-| `/presigned/callback`   | POST | **Mode B (第2步)** | `{ "key": "uuid...", "originalName": "...", "size": 1024, "mimetype": "..." }` |
+## 📚 API 接口说明
+
+所有接口前缀建议使用：`http://<IP>:3000/api/v1/files`
+
+### 1. 目录与导航
+
+| 接口 | 方法 | 说明 | 参数 |
+| --- | --- | --- | --- |
+| `/content` | GET | **核心接口**：获取当前目录内容 | `folderUuid`: 目标 ID (不传则为根) |
+| `/folders` | POST | 创建新文件夹 | `{ "name": "...", "parentId": "..." }` |
+| `/folders/:uuid` | DELETE | **级联删除**文件夹及其内容 | 无 |
+| `/breadcrumbs` | GET | 获取当前位置的面包屑路径 | `folderUuid` |
+
+### 2. 文件上传
+
+| 接口 | 方法 | 模式 | 流程 |
+| --- | --- | --- | --- |
+| `/upload` | POST | Mode A | 直接通过 `multipart/form-data` 上传，字段名 `file` |
+| `/presigned/upload-url` | POST | Mode B (1) | 获取上传签名 URL，需带上 `folderUuid` |
+| `/presigned/callback` | POST | Mode B (2) | 上传 RustFS 成功后回传元数据，持久化到数据库 |
+
+### 3. 下载与删除
+
+| 接口 | 方法 | 说明 |
+| --- | --- | --- |
+| `/download/:id` | GET | 服务器中转下载，支持原始文件名重命名 |
+| `/presigned/download/:id` | GET | 获取 1 小时有效期的直连下载 URL |
+| `/:id` | DELETE | 删除单个文件 |
 
 ---
 
-### 2. 下载接口
-
-| 接口                      | 方法 | 描述       | 备注                                                       |
-| ------------------------- | ---- | ---------- | ---------------------------------------------------------- |
-| `/download/:id`           | GET  | **Mode A** | 流式下载（响应头包含 `Content-Disposition`）               |
-| `/presigned/download/:id` | GET  | **Mode B** | 获取临时直链（返回 `{ "url": "...", "filename": "..." }`） |
-
-
-### 3. 管理接口
-
-| 接口   | 方法   | 描述                            |
-| ------ | ------ | ------------------------------- |
-| `/`    | GET    | 获取文件列表                    |
-| `/:id` | DELETE | 删除文件 (先删云端，后删数据库) |
-
-## 📂 项目结构
+## 📂 项目目录结构
 
 ```text
-node-rustfs-server/
+RustFS_File/
 ├── src/
-│   ├── config/
-│   │   ├── db.js          # SQLite 初始化与连接 (Better-SQLite3)
-│   │   └── s3.js          # AWS SDK v3 配置 (含超时设置)
-│   ├── controllers/
-│   │   └── fileController.js  # 请求处理层
-│   ├── services/
-│   │   └── fileService.js     # 核心业务层 (SQL操作 + S3命令)
-│   ├── routes/
-│   │   └── fileRoutes.js      # 路由定义
-│   └── middlewares/
-│       └── upload.js          # Multer 限制配置
-├── server.js              # 入口文件
-├── index.html             # 前端测试页面
-├── .env                   # 配置文件
-└── package.json
+│   ├── config/       # 数据库与 S3 客户端连接
+│   ├── controllers/  # 业务逻辑调度与 API 返回封装
+│   ├── services/     # 核心业务层 (递归删除、SQL 操作)
+│   ├── routes/       # 路由定义 (API v1)
+│   └── middlewares/  # Multer 上传限制、鉴权
+├── server.js         # 程序入口
+├── index.html        # 全功能前端测试台
+└── .env              # 敏感配置
 
 ```
 
-## ⚠️ 常见问题 (Troubleshooting)
+---
 
-1. **CORS 错误 (Mode B 直传时)**
+## ⚠️ 局域网注意事项 (Best Practices)
 
-- 现象：前端 Console 报错 `Access to XMLHttpRequest ... has been blocked by CORS policy`。
-- 原因：浏览器直接访问 RustFS，但 RustFS 未配置允许跨域。
-- 解决：需在 RustFS/MinIO 端配置 Bucket 的 CORS 规则，允许 `PUT` 方法和所有 Origin (`*`)。
-
-2. **上传超时 (Timeout)**
-
-- 现象：上传超大文件时 Node.js 报错 `SocketHangUp`。
-- 解决：我们在 `src/config/s3.js` 中已将 `socketTimeout` 设置为 3分钟。如果文件极大，请尽量使用 **Mode B (直传)**，因为它不经过 Node.js，不受 Node 超时限制。
-
-3. **下载文件名乱码**
-
-- 项目已内置 RFC 5987 标准支持 (`filename*=UTF-8''...`)，请确保使用现代浏览器（Chrome/Edge/Firefox）进行测试。
+1. **CORS 权限**：若 Mode B 上传失败，请确保 RustFS/MinIO 后台已配置 CORS 规则，允许 `PUT` 方法。
+2. **大文件删除**：递归删除大文件夹时，由于涉及大量 S3 网络请求，接口响应可能稍慢，前端应增加 Loading 状态。
+3. **API 地址**：在局域网内供他人调用时，请将 `localhost` 改为服务器的局域网静态 IP。
 
 ---
 
 **License**: MIT
+
+**Author**: Edward
+
+---
