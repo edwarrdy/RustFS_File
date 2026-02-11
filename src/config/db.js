@@ -2,7 +2,7 @@
  * @Author: edward jifengming92@163.com
  * @Date: 2026-01-21 15:16:00
  * @LastEditors: edward jifengming92@163.com
- * @LastEditTime: 2026-02-10 15:50:30
+ * @LastEditTime: 2026-02-11 13:30:03
  * @FilePath: \RustFS_File\src\config\db.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -24,7 +24,7 @@ const initScript = `
         uuid TEXT NOT NULL UNIQUE,       -- 用于 S3 路径
         displayName TEXT NOT NULL,       -- 用户看到的名称
         parentId TEXT DEFAULT NULL,      -- 指向父文件夹的 uuid,根目录为 NULL
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        createdAt DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
         FOREIGN KEY (parentId) REFERENCES folders(uuid) ON DELETE CASCADE
     );
 
@@ -38,34 +38,11 @@ const initScript = `
         size INTEGER NOT NULL,
         bucket TEXT NOT NULL,
         folderUuid TEXT NOT NULL,        -- 文件所属文件夹的 uuid
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        createdAt DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
     )
 `;
 
 db.exec(initScript);
-
-// 2. 核心修复逻辑：检查并更名/添加字段
-try {
-  const tableInfo = db.prepare("PRAGMA table_info(files)").all();
-  const hasFolderUuid = tableInfo.some(
-    (column) => column.name === "folderUuid",
-  );
-  const hasOldFolder = tableInfo.some((column) => column.name === "folder");
-
-  if (!hasFolderUuid) {
-    if (hasOldFolder) {
-      // 如果有旧的 folder 字段，将其更名为 folderUuid
-      console.log("[DB] 正在将字段 'folder' 重命名为 'folderUuid'...");
-      db.exec("ALTER TABLE files RENAME COLUMN folder TO folderUuid");
-    } else {
-      // 如果连旧字段都没有，直接添加
-      console.log("[DB] 正在添加缺失的 'folderUuid' 字段...");
-      db.exec("ALTER TABLE files ADD COLUMN folderUuid TEXT DEFAULT 'root'");
-    }
-  }
-} catch (err) {
-  console.error("[DB] 自动迁移失败，请检查数据库权限或手动修改:", err.message);
-}
 
 console.log(`[DB] SQLite database connected at ${dbPath}`);
 
