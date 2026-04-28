@@ -1,9 +1,9 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # 1. 存储服务 (RustFS)
   rustfs-storage:
-    image: n0ncetonic/rustfs:latest # 使用 RustFS 官方/常用镜像
+    image: rustfs/rustfs:latest # 使用 RustFS 官方/常用镜像
     container_name: rustfs-storage
     restart: always
     ports:
