@@ -1,7 +1,7 @@
 services:
   # 1. 存储服务 (RustFS)
   rustfs-storage:
-    image: n0ncetonic/rustfs:latest
+    image: rustfs/rustfs:latest
     container_name: rustfs-storage
     restart: always
     ports:
