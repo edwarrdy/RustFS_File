@@ -1,9 +1,7 @@
-version: "3.8"
-
 services:
   # 1. 存储服务 (RustFS)
   rustfs-storage:
-    image: rustfs/rustfs:latest # 使用 RustFS 官方/常用镜像
+    image: n0ncetonic/rustfs:latest
     container_name: rustfs-storage
     restart: always
     ports:
@@ -15,8 +13,9 @@ services:
       - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
       - RUSTFS_BUCKET_NAME=${RUSTFS_BUCKET_NAME:-my-bucket}
 
-  # 2. API 服务 (Node.js + Debian)
+  # 2. API 服务 (Node.js + Alpine)
   rustfs-api-server:
+    # 提示：如果是服务器部署，建议这里改为 image: 你的用户名/rustfs-api:latest
     build: .
     container_name: rustfs-api-server
     restart: always
@@ -26,12 +25,13 @@ services:
       - "3000:3000"
     volumes:
       - ./data:/app/data
+    # 关键修改：如果 .env 不存在，不要报错，继续执行
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - PORT=3000
       - NODE_ENV=production
-      # 核心：使用 Docker 内部网络连接存储服务
       - RUSTFS_ENDPOINT=http://rustfs-storage:9000
       - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY:-admin}
       - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
