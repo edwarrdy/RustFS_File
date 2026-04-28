@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  rustfs-node-server:
+    build: .
+    container_name: rustfs-node-server
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      # 将 SQLite 数据库文件挂载到宿主机，防止容器重启导致数据丢失
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      - NODE_ENV=production

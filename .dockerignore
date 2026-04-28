@@ -1,0 +1,6 @@
+node_modules
+npm-debug.log
+file-server.db*
+.git
+.env
+index.html

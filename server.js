@@ -23,29 +23,25 @@ const PORT = process.env.PORT || 3000;
 
 // --- 1. 全局中间件 ---
 
-// 允许跨域 (CORS)，这样你的前端 (Vue/React) 才能访问
+// 允许跨域 (CORS)
 app.use(cors());
 
-// 解析 JSON 请求体 (关键：处理预签名回调时的 JSON 数据)
+// 解析 JSON 请求体
 app.use(express.json());
 
-// 解析 URL-encoded 请求体 (可选，用于处理普通表单)
+// 解析 URL-encoded 请求体
 app.use(express.urlencoded({ extended: true }));
 
 // --- 2. 注册路由 ---
 
 // 将文件相关的路由挂载到 /files 路径下
-// 例如:
-//   上传接口 -> POST /files/upload
-//   获取上传URL -> POST /files/presigned/upload-url
 app.use("/files", fileRoutes);
 
-// 健康检查接口 (用于测试服务器是否活着)
+// 健康检查接口
 app.get("/", (req, res) => {
   res.send({
     status: "ok",
-    message: "RustFS Node Server is running",
-    backend: "better-sqlite3 + aws-sdk-v3",
+    message: "RustFS API Server is running",
   });
 });
 
