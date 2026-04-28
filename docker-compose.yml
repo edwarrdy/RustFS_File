@@ -16,7 +16,8 @@ services:
   # 2. API 服务 (Node.js + Alpine)
   rustfs-api-server:
     # 提示：如果是服务器部署，建议这里改为 image: 你的用户名/rustfs-api:latest
-    build: .
+    # build: .
+    build: edwarrdy/rustfs-api:latest
     container_name: rustfs-api-server
     restart: always
     depends_on:
