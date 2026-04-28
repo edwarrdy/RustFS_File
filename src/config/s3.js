@@ -10,11 +10,12 @@ const { S3Client } = require("@aws-sdk/client-s3");
 const { NodeHttpHandler } = require("@smithy/node-http-handler");
 
 const s3Client = new S3Client({
-  endpoint: process.env.RUSTFS_ENDPOINT,
-  region: process.env.RUSTFS_REGION,
+  // 优先读环境变量，否则尝试连接 Compose 中的默认存储名
+  endpoint: process.env.RUSTFS_ENDPOINT || "http://rustfs-storage:9000",
+  region: process.env.RUSTFS_REGION || "cn-north-1",
   credentials: {
-    accessKeyId: process.env.RUSTFS_ACCESS_KEY,
-    secretAccessKey: process.env.RUSTFS_SECRET_KEY,
+    accessKeyId: process.env.RUSTFS_ACCESS_KEY || "admin",
+    secretAccessKey: process.env.RUSTFS_SECRET_KEY || "password123",
   },
   // 核心配置：必须启用 Path-style 以兼容 RustFS
   forcePathStyle: true,

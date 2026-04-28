@@ -1,17 +1,39 @@
 version: '3.8'
 
 services:
-  rustfs-node-server:
-    build: .
-    container_name: rustfs-node-server
+  # 1. 存储服务 (RustFS)
+  rustfs-storage:
+    image: n0ncetonic/rustfs:latest # 使用 RustFS 官方/常用镜像
+    container_name: rustfs-storage
     restart: always
     ports:
+      - "9000:9000"
+    volumes:
+      - ./rustfs_data:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY:-admin}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
+      - RUSTFS_BUCKET_NAME=${RUSTFS_BUCKET_NAME:-my-bucket}
+
+  # 2. API 服务 (Node.js + Debian)
+  rustfs-api-server:
+    build: .
+    container_name: rustfs-api-server
+    restart: always
+    depends_on:
+      - rustfs-storage
+    ports:
       - "3000:3000"
+    volumes:
+      - ./data:/app/data
     env_file:
       - .env
-    volumes:
-      # 将 SQLite 数据库文件挂载到宿主机，防止容器重启导致数据丢失
-      - ./data:/app/data
     environment:
       - PORT=3000
       - NODE_ENV=production
+      # 核心：使用 Docker 内部网络连接存储服务
+      - RUSTFS_ENDPOINT=http://rustfs-storage:9000
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY:-admin}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
+      - RUSTFS_BUCKET_NAME=${RUSTFS_BUCKET_NAME:-my-bucket}
+      - RUSTFS_REGION=${RUSTFS_REGION:-cn-north-1}
