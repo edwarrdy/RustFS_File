@@ -4,6 +4,7 @@ const {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   CreateBucketCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -13,58 +14,35 @@ const path = require("path");
 class FileService {
   constructor() {
     // --- 1. 文件夹相关 SQL ---
-
-    // 创建文件夹：parentId 指向父级的 uuid
     this.createFolderStmt = db.prepare(`
         INSERT INTO folders (uuid, displayName, parentId)
         VALUES (?, ?, ?)
     `);
-    // 查询当前层级的子文件夹 (分根目录和子目录两种情况)
     this.listRootFoldersStmt = db.prepare(
       "SELECT * FROM folders WHERE parentId IS NULL ORDER BY displayName ASC",
     );
     this.listSubFoldersStmt = db.prepare(
       "SELECT * FROM folders WHERE parentId = ? ORDER BY displayName ASC",
     );
-    // 查找文件夹详情 (用于面包屑或校验)
     this.findFolderByUuidStmt = db.prepare(
       "SELECT * FROM folders WHERE uuid = ?",
     );
-
     this.deleteFolderStmt = db.prepare("DELETE FROM folders WHERE uuid = ?");
 
     // --- 2. 文件相关 SQL ---
-
     this.insertFileStmt = db.prepare(`
-            INSERT INTO files (uuidName, originalName, mimetype, size, bucket, folderUuid)
-            VALUES (@uuidName, @originalName, @mimetype, @size, @bucket, @folderUuid)
-        `);
-
-    this.insertStmt = db.prepare(`
-            INSERT INTO files (uuidName, originalName, mimetype, size, bucket, folderUuid)
-            VALUES (@uuidName, @originalName, @mimetype, @size, @bucket, @folderUuid)
-        `);
-
-    // 查询当前文件夹下的文件
+        INSERT INTO files (uuidName, originalName, mimetype, size, bucket, folderUuid)
+        VALUES (@uuidName, @originalName, @mimetype, @size, @bucket, @folderUuid)
+    `);
     this.listFilesByFolderStmt = db.prepare(
       "SELECT * FROM files WHERE folderUuid = ? ORDER BY id DESC",
     );
-
-    // 查询根目录下的文件 (如果你的逻辑是根目录文件 folderUuid 为 'root')
     this.listRootFilesStmt = db.prepare(
       "SELECT * FROM files WHERE folderUuid = 'root' ORDER BY id DESC",
     );
-
-    this.listByFolderStmt = db.prepare(
-      "SELECT * FROM files WHERE folderUuid = ? ORDER BY id DESC",
-    );
-
     this.findFileByIdStmt = db.prepare("SELECT * FROM files WHERE id = ?");
     this.deleteFileStmt = db.prepare("DELETE FROM files WHERE id = ?");
-
-    this.findByIdStmt = db.prepare("SELECT * FROM files WHERE id = ?");
     this.listAllStmt = db.prepare("SELECT * FROM files ORDER BY id DESC");
-    this.deleteStmt = db.prepare("DELETE FROM files WHERE id = ?");
 
     this.initBucket();
   }
@@ -236,42 +214,65 @@ class FileService {
 
   // --- 递归删除文件夹及其所有子文件夹和文件 ---
   async deleteFolder(uuid) {
-    // 1. 查找当前文件夹下的所有子文件夹
-    const subFolders = this.listSubFoldersStmt.all(uuid);
+    // 1. 递归获取所有需要删除的文件和文件夹 UUID
+    const allFileKeys = [];
+    const allFolderUuids = [uuid];
 
-    // 2. 递归调用自身，先处理子文件夹（深度优先遍历）
-    for (const folder of subFolders) {
-      await this.deleteFolder(folder.uuid);
-    }
+    const collectRecursive = (currentUuid) => {
+      // 获取当前文件夹下的文件
+      const files = this.listFilesByFolderStmt.all(currentUuid);
+      files.forEach((f) => allFileKeys.push({ Key: f.uuidName }));
 
-    // 3. 获取当前文件夹下的所有文件记录
-    const files = this.listFilesByFolderStmt.all(uuid);
+      // 获取子文件夹
+      const subFolders = this.listSubFoldersStmt.all(currentUuid);
+      subFolders.forEach((sf) => {
+        allFolderUuids.push(sf.uuid);
+        collectRecursive(sf.uuid);
+      });
+    };
 
-    // 4. 清理该文件夹下的所有文件 (S3 + 数据库)
-    for (const file of files) {
+    collectRecursive(uuid);
+
+    // 2. 批量从 S3 删除物理文件
+    if (allFileKeys.length > 0) {
+      console.log(
+        `[Recursive Delete] 正在批量清理 S3 文件，共 ${allFileKeys.length} 个...`,
+      );
       try {
-        console.log(`[Recursive Delete] 正在清理 S3 文件: ${file.uuidName}`);
-        
-        // 从 S3 删除物理文件
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: file.bucket,
-          Key: file.uuidName
-        }));
-
-        // 从数据库删除文件记录
-        this.deleteFileStmt.run(file.id);
+        await s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: BUCKET_NAME,
+            Delete: { Objects: allFileKeys },
+          }),
+        );
       } catch (error) {
-        // 如果 S3 删除失败，抛出错误以中断流程，防止数据库记录被误删
-        console.error(`[Delete Error] 无法删除 S3 文件 ${file.uuidName}:`, error.message);
-        throw new Error(`文件夹清理中断：文件 ${file.originalName} 物理删除失败。`);
+        console.error(`[Delete Error] S3 批量删除失败:`, error.message);
+        throw new Error(`云端文件删除失败，操作已中止。`);
       }
     }
 
-    // 5. 当所有子文件夹和文件都清理完毕后，删除当前文件夹记录
-    this.deleteFolderStmt.run(uuid);
-    
-    console.log(`[Recursive Delete] 文件夹已彻底清除: ${uuid}`);
-    return { uuid, success: true };
+    // 3. 利用事务从数据库删除 (确保原子性)
+    const deleteTransaction = db.transaction(() => {
+      const deleteFilesByFolder = db.prepare(
+        "DELETE FROM files WHERE folderUuid = ?",
+      );
+      for (const fUuid of allFolderUuids) {
+        deleteFilesByFolder.run(fUuid);
+      }
+      // 手动按层级逆序删除文件夹 (由深到浅)
+      for (let i = allFolderUuids.length - 1; i >= 0; i--) {
+        this.deleteFolderStmt.run(allFolderUuids[i]);
+      }
+    });
+
+    deleteTransaction();
+
+    console.log(`[Recursive Delete] 文件夹及其内容已彻底清除: ${uuid}`);
+    return {
+      uuid,
+      filesDeleted: allFileKeys.length,
+      foldersDeleted: allFolderUuids.length,
+    };
   }
 
   async getAllFiles() {

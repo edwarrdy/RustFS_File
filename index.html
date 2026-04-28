@@ -319,36 +319,77 @@
 
       // --- 修改后的上传 (Mode A) ---
       async function uploadModeA() {
-        const file = document.getElementById("fileInputA").files[0];
+        const fileInput = document.getElementById("fileInputA");
+        const file = fileInput.files[0];
         if (!file) return;
+
+        // 前端初步检查 (50MB)
+        if (file.size > 50 * 1024 * 1024) {
+          log("文件超过 50MB，中转模式无法处理，请点击【极速直传】", "error");
+          fileInput.value = "";
+          return;
+        }
+
+        const bar = document.getElementById("progressBar");
+        const barParent = document.getElementById("progressBarParent");
         const fd = new FormData();
         fd.append("file", file);
         fd.append("folderUuid", currentFolderUuid);
 
         try {
-          log(`[Mode A] 正在上传至当前目录...`);
-          const res = await fetch(`${API_BASE}/upload`, {
-            method: "POST",
-            body: fd,
-          });
-          if (res.ok) {
-            log("上传成功", "success");
-            loadContent(currentFolderUuid);
-          }
+          bar.style.width = "0%";
+          barParent.style.display = "block";
+          log(`[Mode A] 正在上传至服务器...`);
+
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `${API_BASE}/upload`);
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              bar.style.width = (e.loaded / e.total) * 100 + "%";
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              log("上传成功", "success");
+              loadContent(currentFolderUuid);
+            } else {
+              let errorMsg = "上传失败";
+              try {
+                const response = JSON.parse(xhr.responseText);
+                errorMsg = response.message || response.error || errorMsg;
+              } catch (e) {}
+              log(errorMsg, "error");
+            }
+            setTimeout(() => (barParent.style.display = "none"), 1000);
+          };
+
+          xhr.onerror = () => {
+            log("网络错误", "error");
+            barParent.style.display = "none";
+          };
+
+          xhr.send(fd);
         } catch (e) {
-          log("上传错误", "error");
+          log("请求初始化失败", "error");
+          barParent.style.display = "none";
+        } finally {
+          fileInput.value = ""; // 清空 input 允许重复选同一个文件
         }
       }
 
       // --- 修改后的上传 (Mode B 直传) ---
       async function uploadModeB() {
-        const file = document.getElementById("fileInputB").files[0];
+        const fileInput = document.getElementById("fileInputB");
+        const file = fileInput.files[0];
         if (!file) return;
+
         const bar = document.getElementById("progressBar");
         const barParent = document.getElementById("progressBarParent");
 
         try {
-          barParent.style.display = "block";
+          // 1. 获取预签名 URL
           log(`[Mode B] 申请加速通道...`);
           const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
             method: "POST",
@@ -361,37 +402,58 @@
           });
           const signData = await signRes.json();
 
+          // 2. 开始上传
+          bar.style.width = "0%";
+          barParent.style.display = "block";
           log(`[Mode B] 正在直传至 RustFS...`);
+
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", signData.uploadUrl);
+
           xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable)
+            if (e.lengthComputable) {
               bar.style.width = (e.loaded / e.total) * 100 + "%";
+            }
           };
 
           xhr.onload = async () => {
-            if (xhr.status < 300) {
+            if (xhr.status >= 200 && xhr.status < 300) {
               log(`[Mode B] 同步元数据...`);
-              await fetch(`${API_BASE}/presigned/callback`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  key: signData.key,
-                  originalName: file.name,
-                  mimetype: file.type || "application/octet-stream",
-                  size: file.size,
-                  folderUuid: currentFolderUuid,
-                }),
-              });
-              log("直传成功", "success");
-              loadContent(currentFolderUuid);
+              try {
+                await fetch(`${API_BASE}/presigned/callback`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    key: signData.key,
+                    originalName: file.name,
+                    mimetype: file.type || "application/octet-stream",
+                    size: file.size,
+                    folderUuid: currentFolderUuid,
+                  }),
+                });
+                log("直传成功", "success");
+                loadContent(currentFolderUuid);
+              } catch (err) {
+                log("元数据同步失败", "error");
+              }
+            } else {
+              log("文件传输失败", "error");
             }
+            // 确保同步完成后再隐藏进度条
+            setTimeout(() => (barParent.style.display = "none"), 1000);
           };
+
+          xhr.onerror = () => {
+            log("直传过程中发生网络错误", "error");
+            barParent.style.display = "none";
+          };
+
           xhr.send(file);
         } catch (e) {
-          log("直传失败", "error");
+          log("获取加速通道失败: " + e.message, "error");
+          barParent.style.display = "none";
         } finally {
-          setTimeout(() => (barParent.style.display = "none"), 2000);
+          fileInput.value = ""; // 清空以允许再次选择相同文件
         }
       }
 

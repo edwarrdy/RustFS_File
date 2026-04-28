@@ -8,7 +8,6 @@
  */
 const { S3Client } = require("@aws-sdk/client-s3");
 const { NodeHttpHandler } = require("@smithy/node-http-handler");
-require("dotenv").config();
 
 const s3Client = new S3Client({
   endpoint: process.env.RUSTFS_ENDPOINT,

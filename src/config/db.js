@@ -15,9 +15,10 @@ const db = new Database(dbPath); // verbose: console.log 可开启日志
 
 // 开启 WAL 模式 (大幅提升并发读写性能，生产环境建议开启)
 db.pragma("journal_mode = WAL");
+// 开启外键约束支持 (SQLite 默认关闭)
+db.pragma("foreign_keys = ON");
 
-// 初始化表结构 (代替了 prisma migrate)
-// 我们直接用 SQL 语句创建表
+// 初始化表结构
 const initScript = `
     CREATE TABLE IF NOT EXISTS folders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,8 +29,6 @@ const initScript = `
         FOREIGN KEY (parentId) REFERENCES folders(uuid) ON DELETE CASCADE
     );
 
-
-
     CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uuidName TEXT NOT NULL,
@@ -39,7 +38,11 @@ const initScript = `
         bucket TEXT NOT NULL,
         folderUuid TEXT NOT NULL,        -- 文件所属文件夹的 uuid
         createdAt DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
-    )
+    );
+
+    -- 添加索引以提升性能
+    CREATE INDEX IF NOT EXISTS idx_folders_parentId ON folders(parentId);
+    CREATE INDEX IF NOT EXISTS idx_files_folderUuid ON files(folderUuid);
 `;
 
 db.exec(initScript);

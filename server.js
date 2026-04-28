@@ -56,10 +56,17 @@ app.use((req, res, next) => {
   res.status(404).json({ error: "Endpoint Not Found" });
 });
 
-// 500 处理 (代码抛出异常时的兜底)
+// 全局错误兜底
 app.use((err, req, res, next) => {
+  // 专门处理 Multer 限制错误
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ 
+      error: "文件过大", 
+      message: "中转上传限制为 50MB，请改用极速直传模式。" 
+    });
+  }
+
   console.error("[Server Error]", err.stack);
-  // 不向客户端暴露具体的错误堆栈，只返回通用错误
   res.status(500).json({ error: "Internal Server Error" });
 });
 
