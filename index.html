@@ -25,8 +25,6 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         margin-bottom: 24px;
       }
-
-      /* 面包屑样式 */
       .breadcrumb {
         display: flex;
         align-items: center;
@@ -49,18 +47,11 @@
       .breadcrumb-separator {
         color: #94a3b8;
       }
-
       .toolbar {
         display: flex;
         gap: 10px;
         margin-bottom: 20px;
       }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
-
       .btn {
         background: var(--primary);
         color: white;
@@ -85,7 +76,6 @@
         border: 1px solid #cbd5e1;
         color: #475569;
       }
-
       table {
         width: 100%;
         border-collapse: collapse;
@@ -102,24 +92,9 @@
         border-bottom: 1px solid #f1f5f9;
         font-size: 14px;
       }
-
-      /* 文件夹与文件图标颜色 */
-      .icon-folder {
-        color: #facc15;
-        font-size: 18px;
-        margin-right: 8px;
-      }
-      .icon-file {
-        color: #94a3b8;
-        font-size: 18px;
-        margin-right: 8px;
-      }
-      .clickable {
-        cursor: pointer;
-        color: var(--primary);
-        font-weight: 500;
-      }
-
+      .icon-folder { color: #facc15; font-size: 18px; margin-right: 8px; }
+      .icon-file { color: #94a3b8; font-size: 18px; margin-right: 8px; }
+      .clickable { cursor: pointer; color: var(--primary); font-weight: 500; }
       .log-area {
         font-family: monospace;
         font-size: 12px;
@@ -154,23 +129,16 @@
     </div>
 
     <div class="toolbar">
-      <button
-        class="btn"
-        onclick="document.getElementById('fileInputA').click()"
-      >
-        📄 中转上传
-      </button>
-      <button
-        class="btn btn-outline"
-        onclick="document.getElementById('fileInputB').click()"
-      >
-        ⚡ 极速直传
-      </button>
-      <button class="btn btn-outline" onclick="promptCreateFolder()">
-        📁 新建文件夹
-      </button>
+      <!-- 暂时隐藏中转上传 -->
+      <button class="btn" onclick="document.getElementById('fileInputA').click()" style="display: none;">📄 中转上传</button>
+      <button class="btn btn-outline" onclick="document.getElementById('fileInputB').click()">⚡ 极速直传</button>
+      <button class="btn btn-outline" onclick="document.getElementById('folderInput').click()">📁 上传文件夹</button>
+      <button class="btn btn-outline" onclick="promptCreateFolder()">📁 新建文件夹</button>
+      <button class="btn btn-outline" onclick="refresh()">🔄 刷新</button>
+      
       <input type="file" id="fileInputA" hidden onchange="uploadModeA()" />
       <input type="file" id="fileInputB" hidden onchange="uploadModeB()" />
+      <input type="file" id="folderInput" hidden webkitdirectory onchange="uploadFolder()" />
     </div>
 
     <div id="progressBarParent"><div id="progressBar"></div></div>
@@ -193,75 +161,60 @@
 
     <script>
       const API_BASE = "http://localhost:3000/files";
-      let currentFolderUuid = "root"; // 当前目录 ID
+      let currentFolderUuid = "root";
 
       function log(msg, type = "") {
         const area = document.getElementById("logArea");
         const div = document.createElement("div");
-        div.style.color =
-          type === "error"
-            ? "#f87171"
-            : type === "success"
-              ? "#4ade80"
-              : "#cbd5e1";
+        div.style.color = type === "error" ? "#f87171" : type === "success" ? "#4ade80" : "#cbd5e1";
         div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
         area.insertBefore(div, area.firstChild);
       }
 
-      // --- 核心：加载目录内容 ---
       async function loadContent(uuid = "root") {
         currentFolderUuid = uuid;
         try {
-          // 1. 获取文件和文件夹
           const res = await fetch(`${API_BASE}/content?folderUuid=${uuid}`);
           const { folders, files } = await res.json();
 
-          // 2. 获取面包屑
-          const bcRes = await fetch(
-            `${API_BASE}/breadcrumbs?folderUuid=${uuid}`,
-          );
+          const bcRes = await fetch(`${API_BASE}/breadcrumbs?folderUuid=${uuid}`);
           const bcData = await bcRes.json();
           renderBreadcrumbs(bcData);
 
-          // 3. 渲染列表
           const list = document.getElementById("contentList");
           let html = "";
 
-          // 渲染文件夹
           folders.forEach((f) => {
             html += `
-                        <tr>
-                            <td class="clickable" onclick="loadContent('${f.uuid}')">
-                                <span class="icon-folder">📁</span> ${f.displayName}
-                            </td>
-                            <td style="color:#94a3b8">-</td>
-                            <td style="color:#64748b; font-size:13px">${f.createdAt || "-"}</td>
-                            <td>
-                                <button class="btn btn-outline" style="padding:4px 8px" onclick="deleteFolder('${f.uuid}')">🗑 删除</button>
-                            </td>
-                        </tr>
-                    `;
+                <tr>
+                    <td class="clickable" onclick="loadContent('${f.uuid}')">
+                        <span class="icon-folder">📁</span> ${f.displayName}
+                    </td>
+                    <td style="color:#94a3b8">-</td>
+                    <td style="color:#64748b; font-size:13px">${f.createdAt || "-"}</td>
+                    <td>
+                        <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadFolder('${f.uuid}')">⬇ 下载</button>
+                        <button class="btn btn-outline" style="padding:4px 8px; margin-left:8px" onclick="deleteFolder('${f.uuid}')">🗑 删除</button>
+                    </td>
+                </tr>
+            `;
           });
 
-          // 渲染文件
           files.forEach((f) => {
             html += `
-                        <tr>
-                            <td><span class="icon-file">📄</span> ${f.originalName}</td>
-                            <td style="color:#64748b">${formatSize(f.size)}</td>
-                            <td style="color:#64748b; font-size:13px">${f.createdAt || "-"}</td>
-                            <td>
-                                <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadModeA(${f.id})">⬇ 普通</button>
-                                <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadModeB(${f.id})">⚡ 加速</button>
-                                <button class="btn btn-danger" style="padding:4px 8px; margin-left:8px" onclick="deleteFile(${f.id})">🗑 删除</button>
-                            </td>
-                        </tr>
-                    `;
+                <tr>
+                    <td><span class="icon-file">📄</span> ${f.originalName}</td>
+                    <td style="color:#64748b">${formatSize(f.size)}</td>
+                    <td style="color:#64748b; font-size:13px">${f.createdAt || "-"}</td>
+                    <td>
+                        <button class="btn btn-outline" style="padding:4px 8px; display: none;" onclick="downloadModeA(${f.id})">⬇ 普通</button>
+                        <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadModeB(${f.id})">⚡ 加速</button>
+                        <button class="btn btn-danger" style="padding:4px 8px; margin-left:8px" onclick="deleteFile(${f.id})">🗑 删除</button>
+                    </td>                </tr>
+            `;
           });
 
-          list.innerHTML =
-            html ||
-            '<tr><td colspan="3" style="text-align:center;color:#94a3b8">空空如也</td></tr>';
+          list.innerHTML = html || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">空空如也</td></tr>';
         } catch (e) {
           log("加载失败: " + e.message, "error");
         }
@@ -269,63 +222,24 @@
 
       function renderBreadcrumbs(data) {
         const container = document.getElementById("breadcrumb");
-        container.innerHTML = data
-          .map(
-            (item, index) => `
-                <span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${item.displayName}</span>
-                ${index < data.length - 1 ? '<span class="breadcrumb-separator">/</span>' : ""}
-            `,
-          )
-          .join("");
+        container.innerHTML = data.map((item, index) => `
+            <span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${item.displayName}</span>
+            ${index < data.length - 1 ? '<span class="breadcrumb-separator">/</span>' : ""}
+        `).join("");
       }
 
-      // --- 文件夹管理 ---
-      async function promptCreateFolder() {
-        const name = prompt("请输入文件夹名称:");
-        if (!name) return;
-        try {
-          const res = await fetch(`${API_BASE}/folders`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name,
-              parentId: currentFolderUuid === "root" ? null : currentFolderUuid,
-            }),
-          });
-          if (res.ok) {
-            log(`文件夹 "${name}" 创建成功`, "success");
-            loadContent(currentFolderUuid);
-          }
-        } catch (e) {
-          log("创建失败", "error");
-        }
+      async function refresh() {
+        await loadContent(currentFolderUuid);
+        log("内容已刷新", "success");
       }
 
-      async function deleteFolder(uuid) {
-        if (!confirm("确定递归删除文件夹吗？内部所有文件都将被永久清除！"))
-          return;
-        try {
-          const res = await fetch(`${API_BASE}/folders/${uuid}`, {
-            method: "DELETE",
-          });
-          if (res.ok) {
-            log("文件夹已清理", "success");
-            loadContent(currentFolderUuid);
-          }
-        } catch (e) {
-          log("删除失败", "error");
-        }
-      }
-
-      // --- 修改后的上传 (Mode A) ---
       async function uploadModeA() {
         const fileInput = document.getElementById("fileInputA");
         const file = fileInput.files[0];
         if (!file) return;
 
-        // 前端初步检查 (50MB)
         if (file.size > 50 * 1024 * 1024) {
-          log("文件超过 50MB，中转模式无法处理，请点击【极速直传】", "error");
+          log("文件超过 50MB，请改用【极速直传】", "error");
           fileInput.value = "";
           return;
         }
@@ -339,47 +253,19 @@
         try {
           bar.style.width = "0%";
           barParent.style.display = "block";
-          log(`[Mode A] 正在上传至服务器...`);
-
+          log(`[Mode A] 正在上传...`);
           const xhr = new XMLHttpRequest();
           xhr.open("POST", `${API_BASE}/upload`);
-
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              bar.style.width = (e.loaded / e.total) * 100 + "%";
-            }
-          };
-
+          xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + "%"; };
           xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              log("上传成功", "success");
-              loadContent(currentFolderUuid);
-            } else {
-              let errorMsg = "上传失败";
-              try {
-                const response = JSON.parse(xhr.responseText);
-                errorMsg = response.message || response.error || errorMsg;
-              } catch (e) {}
-              log(errorMsg, "error");
-            }
-            setTimeout(() => (barParent.style.display = "none"), 1000);
+            if (xhr.status >= 200 && xhr.status < 300) { log("上传成功", "success"); loadContent(currentFolderUuid); }
+            else { log("上传失败", "error"); }
+            setTimeout(() => barParent.style.display = "none", 1000);
           };
-
-          xhr.onerror = () => {
-            log("网络错误", "error");
-            barParent.style.display = "none";
-          };
-
           xhr.send(fd);
-        } catch (e) {
-          log("请求初始化失败", "error");
-          barParent.style.display = "none";
-        } finally {
-          fileInput.value = ""; // 清空 input 允许重复选同一个文件
-        }
+        } finally { fileInput.value = ""; }
       }
 
-      // --- 修改后的上传 (Mode B 直传) ---
       async function uploadModeB() {
         const fileInput = document.getElementById("fileInputB");
         const file = fileInput.files[0];
@@ -389,105 +275,137 @@
         const barParent = document.getElementById("progressBarParent");
 
         try {
-          // 1. 获取预签名 URL
           log(`[Mode B] 申请加速通道...`);
           const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              filename: file.name,
-              mimetype: file.type || "application/octet-stream",
-              folderUuid: currentFolderUuid,
-            }),
+            body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", folderUuid: currentFolderUuid })
           });
           const signData = await signRes.json();
 
-          // 2. 开始上传
           bar.style.width = "0%";
           barParent.style.display = "block";
           log(`[Mode B] 正在直传至 RustFS...`);
-
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", signData.uploadUrl);
-
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              bar.style.width = (e.loaded / e.total) * 100 + "%";
-            }
-          };
-
+          xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + "%"; };
           xhr.onload = async () => {
             if (xhr.status >= 200 && xhr.status < 300) {
               log(`[Mode B] 同步元数据...`);
-              try {
-                await fetch(`${API_BASE}/presigned/callback`, {
+              await fetch(`${API_BASE}/presigned/callback`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key: signData.key, originalName: file.name, mimetype: file.type || "application/octet-stream", size: file.size, folderUuid: currentFolderUuid })
+              });
+              log("直传成功", "success");
+              loadContent(currentFolderUuid);
+            }
+            setTimeout(() => barParent.style.display = "none", 1000);
+          };
+          xhr.send(file);
+        } finally { fileInput.value = ""; }
+      }
+
+      async function uploadFolder() {
+        const input = document.getElementById("folderInput");
+        const files = Array.from(input.files);
+        if (files.length === 0) return;
+
+        log(`[Folder] 准备上传，共 ${files.length} 个文件...`);
+        const bar = document.getElementById("progressBar");
+        const barParent = document.getElementById("progressBarParent");
+        barParent.style.display = "block";
+
+        const folderCache = { "": currentFolderUuid };
+
+        try {
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const pathParts = file.webkitRelativePath.split("/");
+            const dirParts = pathParts.slice(0, -1);
+
+            let lastParentUuid = currentFolderUuid;
+            let currentPath = "";
+            for (const part of dirParts) {
+              currentPath += (currentPath ? "/" : "") + part;
+              if (!folderCache[currentPath]) {
+                const res = await fetch(`${API_BASE}/folders`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    key: signData.key,
-                    originalName: file.name,
-                    mimetype: file.type || "application/octet-stream",
-                    size: file.size,
-                    folderUuid: currentFolderUuid,
-                  }),
+                  body: JSON.stringify({ name: part, parentId: lastParentUuid === "root" ? null : lastParentUuid })
                 });
-                log("直传成功", "success");
-                loadContent(currentFolderUuid);
-              } catch (err) {
-                log("元数据同步失败", "error");
+                const folder = await res.json();
+                folderCache[currentPath] = folder.uuid;
               }
-            } else {
-              log("文件传输失败", "error");
+              lastParentUuid = folderCache[currentPath];
             }
-            // 确保同步完成后再隐藏进度条
-            setTimeout(() => (barParent.style.display = "none"), 1000);
-          };
 
-          xhr.onerror = () => {
-            log("直传过程中发生网络错误", "error");
-            barParent.style.display = "none";
-          };
+            bar.style.width = ((i / files.length) * 100).toFixed(0) + "%";
+            const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", folderUuid: lastParentUuid })
+            });
+            const signData = await signRes.json();
 
-          xhr.send(file);
+            await fetch(signData.uploadUrl, { method: "PUT", body: file });
+            await fetch(`${API_BASE}/presigned/callback`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ key: signData.key, originalName: file.name, mimetype: file.type || "application/octet-stream", size: file.size, folderUuid: lastParentUuid })
+            });
+          }
+          log("文件夹上传成功", "success");
+          loadContent(currentFolderUuid);
         } catch (e) {
-          log("获取加速通道失败: " + e.message, "error");
-          barParent.style.display = "none";
+          log("上传失败: " + e.message, "error");
         } finally {
-          fileInput.value = ""; // 清空以允许再次选择相同文件
+          barParent.style.display = "none";
+          input.value = "";
         }
       }
 
-      // --- 通用功能 ---
-      function formatSize(bytes) {
-        if (bytes === 0) return "0 B";
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return (
-          (bytes / Math.pow(1024, i)).toFixed(2) +
-          " " +
-          ["B", "KB", "MB", "GB"][i]
-        );
+      function downloadFolder(uuid) {
+        log("正在准备压缩包，请稍候...");
+        window.location.href = `${API_BASE}/folders/download/${uuid}`;
+      }
+
+      async function promptCreateFolder() {
+        const name = prompt("请输入文件夹名称:");
+        if (!name) return;
+        const res = await fetch(`${API_BASE}/folders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, parentId: currentFolderUuid === "root" ? null : currentFolderUuid })
+        });
+        if (res.ok) { log(`文件夹 "${name}" 创建成功`, "success"); loadContent(currentFolderUuid); }
+      }
+
+      async function deleteFolder(uuid) {
+        if (!confirm("确定递归删除吗？内容将永久清除！")) return;
+        const res = await fetch(`${API_BASE}/folders/${uuid}`, { method: "DELETE" });
+        if (res.ok) { log("已清理", "success"); loadContent(currentFolderUuid); }
       }
 
       async function deleteFile(id) {
         if (!confirm("确定删除文件吗？")) return;
         const res = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
-        if (res.ok) {
-          log("文件已删除", "success");
-          loadContent(currentFolderUuid);
-        }
+        if (res.ok) { log("已删除", "success"); loadContent(currentFolderUuid); }
       }
 
-      function downloadModeA(id) {
-        window.location.href = `${API_BASE}/download/${id}`;
+      function formatSize(bytes) {
+        if (bytes === 0) return "0 B";
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(2) + " " + ["B", "KB", "MB", "GB"][i];
       }
 
+      function downloadModeA(id) { window.location.href = `${API_BASE}/download/${id}`; }
       async function downloadModeB(id) {
         const res = await fetch(`${API_BASE}/presigned/download/${id}`);
         const data = await res.json();
         window.open(data.url, "_blank");
       }
 
-      // 初始化加载根目录
       loadContent("root");
     </script>
   </body>

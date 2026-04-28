@@ -128,6 +128,26 @@ exports.getDownloadUrl = async (req, res) => {
   }
 };
 
+// --- 文件夹下载 (ZIP) ---
+exports.downloadFolder = async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { stream, filename } = await fileService.getFolderZipStream(uuid);
+
+    res.setHeader("Content-Type", "application/zip");
+    const encodedName = encodeURIComponent(filename + ".zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodedName}`,
+    );
+
+    stream.pipe(res);
+  } catch (error) {
+    console.error("[Download Folder Error]", error);
+    res.status(500).send("下载文件夹失败");
+  }
+};
+
 exports.getBreadcrumbs = async (req, res) => {
   try {
     const { folderUuid } = req.query;

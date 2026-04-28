@@ -15,6 +15,7 @@ const uploadMiddleware = require("../middlewares/upload"); // 保持原有的 mu
 router.post("/folders", fileController.createFolder); // 创建
 router.get("/content", fileController.getContent); // 获取目录内容
 router.delete("/folders/:uuid", fileController.removeFolder); // 递归删除
+router.get("/folders/download/:uuid", fileController.downloadFolder); // 文件夹下载 (ZIP)
 
 // --- 模式 A: 简单服务器中转 ---
 router.post("/upload", uploadMiddleware.single("file"), fileController.upload);

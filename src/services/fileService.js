@@ -10,6 +10,7 @@ const {
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const crypto = require("crypto");
 const path = require("path");
+const archiver = require("archiver");
 
 class FileService {
   constructor() {
@@ -273,6 +274,50 @@ class FileService {
       filesDeleted: allFileKeys.length,
       foldersDeleted: allFolderUuids.length,
     };
+  }
+
+  // --- 文件夹下载 (ZIP) ---
+  async getFolderZipStream(folderUuid) {
+    const rootFolder = this.findFolderByUuidStmt.get(folderUuid);
+    if (!rootFolder) throw new Error("FOLDER_NOT_FOUND");
+
+    const archive = archiver("zip", { zlib: { level: 5 } });
+    
+    // 递归收集所有文件并加入压缩包
+    const appendRecursive = async (currentUuid, relativePath) => {
+      // 1. 获取当前文件夹下的文件
+      const files = this.listFilesByFolderStmt.all(currentUuid);
+      for (const file of files) {
+        try {
+          const response = await s3Client.send(new GetObjectCommand({
+            Bucket: file.bucket,
+            Key: file.uuidName
+          }));
+          // 将文件流加入 zip，指定在压缩包内的完整路径
+          archive.append(response.Body, { name: path.join(relativePath, file.originalName) });
+        } catch (err) {
+          console.error(`[Zip Error] 无法读取文件 ${file.originalName}:`, err.message);
+        }
+      }
+
+      // 2. 获取子文件夹并递归
+      const subFolders = this.listSubFoldersStmt.all(currentUuid);
+      for (const folder of subFolders) {
+        await appendRecursive(folder.uuid, path.join(relativePath, folder.displayName));
+      }
+    };
+
+    // 开始递归处理 (后台运行)
+    (async () => {
+      try {
+        await appendRecursive(folderUuid, "");
+        await archive.finalize();
+      } catch (e) {
+        archive.emit('error', e);
+      }
+    })();
+
+    return { stream: archive, filename: rootFolder.displayName };
   }
 
   async getAllFiles() {
