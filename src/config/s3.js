@@ -27,7 +27,21 @@ const s3Client = new S3Client({
   maxAttempts: 3,
 });
 
+// 新增：专门用于生成预签名链接的客户端
+// 在生产环境下，客户端（浏览器）无法解析 http://rustfs-storage 这种内部域名
+// 因此需要一个外部可访问的地址（如 http://your-ip:9000）
+const publicS3Client = new S3Client({
+  endpoint: process.env.RUSTFS_PUBLIC_ENDPOINT || process.env.RUSTFS_ENDPOINT || "http://rustfs-storage:9000",
+  region: process.env.RUSTFS_REGION || "cn-north-1",
+  credentials: {
+    accessKeyId: process.env.RUSTFS_ACCESS_KEY || "admin",
+    secretAccessKey: process.env.RUSTFS_SECRET_KEY || "password123",
+  },
+  forcePathStyle: true,
+});
+
 module.exports = {
   s3Client,
+  publicS3Client,
   BUCKET_NAME: process.env.RUSTFS_BUCKET_NAME,
 };

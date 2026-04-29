@@ -22,7 +22,7 @@ WORKDIR /app
 COPY --from=builder /app /app
 
 # 暴露端口
-EXPOSE 3000
+EXPOSE 3300
 
 # 启动命令
 CMD ["node", "server.js"]

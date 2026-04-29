@@ -23,7 +23,7 @@ services:
     depends_on:
       - rustfs-storage
     ports:
-      - "3000:3000"
+      - "3300:3300"
     volumes:
       - ./data:/app/data
     # 关键修改：如果 .env 不存在，不要报错，继续执行
@@ -31,9 +31,11 @@ services:
       - path: .env
         required: false
     environment:
-      - PORT=3000
+      - PORT=3300
       - NODE_ENV=production
       - RUSTFS_ENDPOINT=http://rustfs-storage:9000
+      # 新增：公网/外部访问地址。如果是公网部署，请改为 http://你的公网IP:9000
+      - RUSTFS_PUBLIC_ENDPOINT=${RUSTFS_PUBLIC_ENDPOINT:-http://192.168.101.60:9000}
       - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY:-admin}
       - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
       - RUSTFS_BUCKET_NAME=${RUSTFS_BUCKET_NAME:-my-bucket}

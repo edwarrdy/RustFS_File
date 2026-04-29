@@ -25,7 +25,7 @@
 # 构建并一键启动 API + RustFS 存储
 docker-compose up -d --build
 ```
-- **API 地址**: `http://localhost:3000`
+- **API 地址**: `http://192.168.101.60:3300`
 - **存储服务**: `http://localhost:9000`
 
 ### 2. 环境变量配置 (.env)

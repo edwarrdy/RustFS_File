@@ -1,5 +1,5 @@
 const db = require("../config/db"); // 引入刚才改写的 db
-const { s3Client, BUCKET_NAME } = require("../config/s3");
+const { s3Client, publicS3Client, BUCKET_NAME } = require("../config/s3");
 const {
   PutObjectCommand,
   GetObjectCommand,
@@ -120,7 +120,7 @@ class FileService {
       ContentType: mimetype,
     });
 
-    const url = await getSignedUrl(s3Client, command, { expiresIn: 600 });
+    const url = await getSignedUrl(publicS3Client, command, { expiresIn: 600 });
     return { uploadUrl: url, key: uniqueKey, folderUuid: folderUuid || "root" };
   }
 
@@ -175,7 +175,7 @@ class FileService {
       ResponseContentDisposition: disposition,
       ResponseContentType: fileRecord.mimetype, // 顺便修正 Content-Type
     });
-    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    const url = await getSignedUrl(publicS3Client, command, { expiresIn: 3600 });
     return { url, filename: fileRecord.originalName };
   }
 
