@@ -9,17 +9,16 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-// 尽早加载环境变量，确保数据库和 AWS 配置能读到
-require("dotenv").config();
+const config = require("./src/config");
 
 // 引入路由
 const fileRoutes = require("./src/routes/fileRoutes");
 
-// 引入数据库配置 (虽然 route 会间接引用，显式引用可以确保启动时就初始化表结构)
+// 引入数据库配置
 require("./src/config/db");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
 
 // --- 1. 全局中间件 ---
 

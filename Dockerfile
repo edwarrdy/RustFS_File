@@ -8,6 +8,8 @@ WORKDIR /app
 
 # 复制依赖定义
 COPY package*.json ./
+
+# 安装所有依赖（包括 devDependencies，因为构建可能需要它们）
 RUN npm install
 
 # 复制源代码
@@ -16,9 +18,16 @@ COPY . .
 # 第二阶段：运行环境 (极简 Alpine)
 FROM node:20-alpine
 
+# 安装运行时可能需要的库 (better-sqlite3 需要)
+RUN apk add --no-cache libstdc++
+
 WORKDIR /app
 
-# 复制构建产物
+# 设置生产环境
+ENV NODE_ENV=production
+
+# 仅从构建阶段复制必要的文件
+# 注意：为了让 better-sqlite3 正常工作，我们需要已编译好的 node_modules
 COPY --from=builder /app /app
 
 # 暴露端口

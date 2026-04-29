@@ -92,9 +92,21 @@
         border-bottom: 1px solid #f1f5f9;
         font-size: 14px;
       }
-      .icon-folder { color: #facc15; font-size: 18px; margin-right: 8px; }
-      .icon-file { color: #94a3b8; font-size: 18px; margin-right: 8px; }
-      .clickable { cursor: pointer; color: var(--primary); font-weight: 500; }
+      .icon-folder {
+        color: #facc15;
+        font-size: 18px;
+        margin-right: 8px;
+      }
+      .icon-file {
+        color: #94a3b8;
+        font-size: 18px;
+        margin-right: 8px;
+      }
+      .clickable {
+        cursor: pointer;
+        color: var(--primary);
+        font-weight: 500;
+      }
       .log-area {
         font-family: monospace;
         font-size: 12px;
@@ -130,15 +142,39 @@
 
     <div class="toolbar">
       <!-- 暂时隐藏中转上传 -->
-      <button class="btn" onclick="document.getElementById('fileInputA').click()" style="display: none;">📄 中转上传</button>
-      <button class="btn btn-outline" onclick="document.getElementById('fileInputB').click()">⚡ 极速直传</button>
-      <button class="btn btn-outline" onclick="document.getElementById('folderInput').click()">📁 上传文件夹</button>
-      <button class="btn btn-outline" onclick="promptCreateFolder()">📁 新建文件夹</button>
+      <button
+        class="btn"
+        onclick="document.getElementById('fileInputA').click()"
+        style="display: none"
+      >
+        📄 中转上传
+      </button>
+      <button
+        class="btn btn-outline"
+        onclick="document.getElementById('fileInputB').click()"
+      >
+        ⚡ 极速直传
+      </button>
+      <button
+        class="btn btn-outline"
+        onclick="document.getElementById('folderInput').click()"
+      >
+        📁 上传文件夹
+      </button>
+      <button class="btn btn-outline" onclick="promptCreateFolder()">
+        📁 新建文件夹
+      </button>
       <button class="btn btn-outline" onclick="refresh()">🔄 刷新</button>
-      
+
       <input type="file" id="fileInputA" hidden onchange="uploadModeA()" />
       <input type="file" id="fileInputB" hidden onchange="uploadModeB()" />
-      <input type="file" id="folderInput" hidden webkitdirectory onchange="uploadFolder()" />
+      <input
+        type="file"
+        id="folderInput"
+        hidden
+        webkitdirectory
+        onchange="uploadFolder()"
+      />
     </div>
 
     <div id="progressBarParent"><div id="progressBar"></div></div>
@@ -160,13 +196,20 @@
     <div class="log-area" id="logArea"></div>
 
     <script>
-      const API_BASE = "http://192.168.101.60:3300/files";
+      // const API_BASE = "http://192.168.101.60:3300/files";
+      const API_BASE = "http://localhost:3300/files";
+
       let currentFolderUuid = "root";
 
       function log(msg, type = "") {
         const area = document.getElementById("logArea");
         const div = document.createElement("div");
-        div.style.color = type === "error" ? "#f87171" : type === "success" ? "#4ade80" : "#cbd5e1";
+        div.style.color =
+          type === "error"
+            ? "#f87171"
+            : type === "success"
+              ? "#4ade80"
+              : "#cbd5e1";
         div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
         area.insertBefore(div, area.firstChild);
       }
@@ -177,7 +220,9 @@
           const res = await fetch(`${API_BASE}/content?folderUuid=${uuid}`);
           const { folders, files } = await res.json();
 
-          const bcRes = await fetch(`${API_BASE}/breadcrumbs?folderUuid=${uuid}`);
+          const bcRes = await fetch(
+            `${API_BASE}/breadcrumbs?folderUuid=${uuid}`,
+          );
           const bcData = await bcRes.json();
           renderBreadcrumbs(bcData);
 
@@ -214,7 +259,9 @@
             `;
           });
 
-          list.innerHTML = html || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">空空如也</td></tr>';
+          list.innerHTML =
+            html ||
+            '<tr><td colspan="4" style="text-align:center;color:#94a3b8">空空如也</td></tr>';
         } catch (e) {
           log("加载失败: " + e.message, "error");
         }
@@ -222,10 +269,14 @@
 
       function renderBreadcrumbs(data) {
         const container = document.getElementById("breadcrumb");
-        container.innerHTML = data.map((item, index) => `
+        container.innerHTML = data
+          .map(
+            (item, index) => `
             <span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${item.displayName}</span>
             ${index < data.length - 1 ? '<span class="breadcrumb-separator">/</span>' : ""}
-        `).join("");
+        `,
+          )
+          .join("");
       }
 
       async function refresh() {
@@ -256,14 +307,23 @@
           log(`[Mode A] 正在上传...`);
           const xhr = new XMLHttpRequest();
           xhr.open("POST", `${API_BASE}/upload`);
-          xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + "%"; };
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable)
+              bar.style.width = (e.loaded / e.total) * 100 + "%";
+          };
           xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) { log("上传成功", "success"); loadContent(currentFolderUuid); }
-            else { log("上传失败", "error"); }
-            setTimeout(() => barParent.style.display = "none", 1000);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              log("上传成功", "success");
+              loadContent(currentFolderUuid);
+            } else {
+              log("上传失败", "error");
+            }
+            setTimeout(() => (barParent.style.display = "none"), 1000);
           };
           xhr.send(fd);
-        } finally { fileInput.value = ""; }
+        } finally {
+          fileInput.value = "";
+        }
       }
 
       async function uploadModeB() {
@@ -279,7 +339,11 @@
           const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", folderUuid: currentFolderUuid })
+            body: JSON.stringify({
+              filename: file.name,
+              mimetype: file.type || "application/octet-stream",
+              folderUuid: currentFolderUuid,
+            }),
           });
           const signData = await signRes.json();
 
@@ -288,22 +352,33 @@
           log(`[Mode B] 正在直传至 RustFS...`);
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", signData.uploadUrl);
-          xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + "%"; };
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable)
+              bar.style.width = (e.loaded / e.total) * 100 + "%";
+          };
           xhr.onload = async () => {
             if (xhr.status >= 200 && xhr.status < 300) {
               log(`[Mode B] 同步元数据...`);
               await fetch(`${API_BASE}/presigned/callback`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ key: signData.key, originalName: file.name, mimetype: file.type || "application/octet-stream", size: file.size, folderUuid: currentFolderUuid })
+                body: JSON.stringify({
+                  key: signData.key,
+                  originalName: file.name,
+                  mimetype: file.type || "application/octet-stream",
+                  size: file.size,
+                  folderUuid: currentFolderUuid,
+                }),
               });
               log("直传成功", "success");
               loadContent(currentFolderUuid);
             }
-            setTimeout(() => barParent.style.display = "none", 1000);
+            setTimeout(() => (barParent.style.display = "none"), 1000);
           };
           xhr.send(file);
-        } finally { fileInput.value = ""; }
+        } finally {
+          fileInput.value = "";
+        }
       }
 
       async function uploadFolder() {
@@ -332,7 +407,10 @@
                 const res = await fetch(`${API_BASE}/folders`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: part, parentId: lastParentUuid === "root" ? null : lastParentUuid })
+                  body: JSON.stringify({
+                    name: part,
+                    parentId: lastParentUuid === "root" ? null : lastParentUuid,
+                  }),
                 });
                 const folder = await res.json();
                 folderCache[currentPath] = folder.uuid;
@@ -344,7 +422,11 @@
             const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", folderUuid: lastParentUuid })
+              body: JSON.stringify({
+                filename: file.name,
+                mimetype: file.type || "application/octet-stream",
+                folderUuid: lastParentUuid,
+              }),
             });
             const signData = await signRes.json();
 
@@ -352,7 +434,13 @@
             await fetch(`${API_BASE}/presigned/callback`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ key: signData.key, originalName: file.name, mimetype: file.type || "application/octet-stream", size: file.size, folderUuid: lastParentUuid })
+              body: JSON.stringify({
+                key: signData.key,
+                originalName: file.name,
+                mimetype: file.type || "application/octet-stream",
+                size: file.size,
+                folderUuid: lastParentUuid,
+              }),
             });
           }
           log("文件夹上传成功", "success");
@@ -376,30 +464,50 @@
         const res = await fetch(`${API_BASE}/folders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, parentId: currentFolderUuid === "root" ? null : currentFolderUuid })
+          body: JSON.stringify({
+            name,
+            parentId: currentFolderUuid === "root" ? null : currentFolderUuid,
+          }),
         });
-        if (res.ok) { log(`文件夹 "${name}" 创建成功`, "success"); loadContent(currentFolderUuid); }
+        if (res.ok) {
+          log(`文件夹 "${name}" 创建成功`, "success");
+          loadContent(currentFolderUuid);
+        }
       }
 
       async function deleteFolder(uuid) {
         if (!confirm("确定递归删除吗？内容将永久清除！")) return;
-        const res = await fetch(`${API_BASE}/folders/${uuid}`, { method: "DELETE" });
-        if (res.ok) { log("已清理", "success"); loadContent(currentFolderUuid); }
+        const res = await fetch(`${API_BASE}/folders/${uuid}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          log("已清理", "success");
+          loadContent(currentFolderUuid);
+        }
       }
 
       async function deleteFile(id) {
         if (!confirm("确定删除文件吗？")) return;
         const res = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
-        if (res.ok) { log("已删除", "success"); loadContent(currentFolderUuid); }
+        if (res.ok) {
+          log("已删除", "success");
+          loadContent(currentFolderUuid);
+        }
       }
 
       function formatSize(bytes) {
         if (bytes === 0) return "0 B";
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return (bytes / Math.pow(1024, i)).toFixed(2) + " " + ["B", "KB", "MB", "GB"][i];
+        return (
+          (bytes / Math.pow(1024, i)).toFixed(2) +
+          " " +
+          ["B", "KB", "MB", "GB"][i]
+        );
       }
 
-      function downloadModeA(id) { window.location.href = `${API_BASE}/download/${id}`; }
+      function downloadModeA(id) {
+        window.location.href = `${API_BASE}/download/${id}`;
+      }
       async function downloadModeB(id) {
         const res = await fetch(`${API_BASE}/presigned/download/${id}`);
         const data = await res.json();

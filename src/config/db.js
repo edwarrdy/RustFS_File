@@ -9,14 +9,18 @@
 const Database = require("better-sqlite3");
 const path = require("path");
 const fs = require("fs");
+const config = require("./index");
 
-// 支持 Docker 数据持久化路径
-const dataDir = path.join(__dirname, "../../data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// 确保数据库目录存在
+const dbPath = path.isAbsolute(config.db.path) 
+  ? config.db.path 
+  : path.resolve(process.cwd(), config.db.path);
+
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, "file-server.db");
 const db = new Database(dbPath);
 
 // 开启 WAL 模式 (大幅提升并发读写性能，生产环境建议开启)

@@ -8,15 +8,11 @@ services:
       - "9000:9000"
     volumes:
       - ./rustfs_data:/data
-    environment:
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY:-admin}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
-      - RUSTFS_BUCKET_NAME=${RUSTFS_BUCKET_NAME:-my-bucket}
+    env_file:
+      - .env
 
   # 2. API 服务 (Node.js + Alpine)
   rustfs-api-server:
-    # 提示：如果是服务器部署，建议这里改为 image: 你的用户名/rustfs-api:latest
-    # build: .
     image: edwarrdy/rustfs-api:latest
     container_name: rustfs-api-server
     restart: always
@@ -26,17 +22,6 @@ services:
       - "3300:3300"
     volumes:
       - ./data:/app/data
-    # 关键修改：如果 .env 不存在，不要报错，继续执行
+    # 核心：只使用环境文件，所有的变量都从这里加载
     env_file:
-      - path: .env
-        required: false
-    environment:
-      - PORT=3300
-      - NODE_ENV=production
-      - RUSTFS_ENDPOINT=http://rustfs-storage:9000
-      # 新增：公网/外部访问地址。如果是公网部署，请改为 http://你的公网IP:9000
-      - RUSTFS_PUBLIC_ENDPOINT=${RUSTFS_PUBLIC_ENDPOINT:-http://192.168.101.60:9000}
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY:-admin}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY:-password123}
-      - RUSTFS_BUCKET_NAME=${RUSTFS_BUCKET_NAME:-my-bucket}
-      - RUSTFS_REGION=${RUSTFS_REGION:-cn-north-1}
+      - .env
