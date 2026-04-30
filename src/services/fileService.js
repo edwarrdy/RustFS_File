@@ -281,7 +281,7 @@ class FileService {
     const rootFolder = this.findFolderByUuidStmt.get(folderUuid);
     if (!rootFolder) throw new Error("FOLDER_NOT_FOUND");
 
-    const archive = archiver("zip", { zlib: { level: 5 } });
+    const archive = archiver("zip", { zlib: { level: 0 } });
     
     // 递归收集所有文件并加入压缩包
     const appendRecursive = async (currentUuid, relativePath) => {
@@ -352,7 +352,7 @@ class FileService {
   }
 
   async getBatchZipStream(fileIds = [], folderUuuids = []) {
-    const archive = archiver("zip", { zlib: { level: 5 } });
+    const archive = archiver("zip", { zlib: { level: 0 } });
 
     const appendItemsRecursive = async (fileIds, folderUuuids, relativePath = "") => {
       // 添加选中的文件
