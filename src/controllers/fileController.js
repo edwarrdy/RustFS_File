@@ -130,9 +130,13 @@ exports.getDownloadUrl = async (req, res) => {
 
 // --- 文件夹下载 (ZIP) ---
 exports.downloadFolder = async (req, res) => {
+  const abortController = new AbortController();
+  let archiveRef = null;
+
   try {
     const { uuid } = req.params;
-    const { stream, filename } = await fileService.getFolderZipStream(uuid);
+    const { stream, filename } = await fileService.getFolderZipStream(uuid, abortController.signal);
+    archiveRef = stream;
 
     res.setHeader("Content-Type", "application/zip");
     const encodedName = encodeURIComponent(filename + ".zip");
@@ -141,10 +145,21 @@ exports.downloadFolder = async (req, res) => {
       `attachment; filename*=UTF-8''${encodedName}`,
     );
 
+    const cleanup = () => {
+      if (!res.writableFinished) {
+        console.log(`[Download] 客户端连接断开，中止打包: ${filename}`);
+        abortController.abort();
+        try { if (archiveRef) archiveRef.abort(); } catch(e) {}
+      }
+    };
+
+    res.on("close", cleanup);
+    res.on("error", cleanup);
+
     stream.pipe(res);
   } catch (error) {
     console.error("[Download Folder Error]", error);
-    res.status(500).send("下载文件夹失败");
+    if (!res.headersSent) res.status(500).send("下载文件夹失败");
   }
 };
 
@@ -161,13 +176,16 @@ exports.batchDelete = async (req, res) => {
 
 // 批量下载
 exports.batchDownload = async (req, res) => {
+  const abortController = new AbortController();
+  let archiveRef = null;
+
   try {
     const { fileIds, folderUuuids } = req.query;
-    // 解析 JSON 字符串
     const fIds = fileIds ? JSON.parse(fileIds) : [];
     const fUuuids = folderUuuids ? JSON.parse(folderUuuids) : [];
 
-    const stream = await fileService.getBatchZipStream(fIds, fUuuids);
+    const stream = await fileService.getBatchZipStream(fIds, fUuuids, abortController.signal);
+    archiveRef = stream;
 
     res.setHeader("Content-Type", "application/zip");
     const filename = `batch_download_${Date.now()}.zip`;
@@ -177,10 +195,21 @@ exports.batchDownload = async (req, res) => {
       `attachment; filename*=UTF-8''${encodedName}`,
     );
 
+    const cleanup = () => {
+      if (!res.writableFinished) {
+        console.log(`[Batch Download] 客户端连接断开，中止批量打包...`);
+        abortController.abort();
+        try { if (archiveRef) archiveRef.abort(); } catch(e) {}
+      }
+    };
+
+    res.on("close", cleanup);
+    res.on("error", cleanup);
+
     stream.pipe(res);
   } catch (error) {
     console.error("[Batch Download Error]", error);
-    res.status(500).send("批量下载失败");
+    if (!res.headersSent) res.status(500).send("批量下载失败");
   }
 };
 

@@ -498,6 +498,7 @@
         window.location.protocol === "file:"
           ? "http://localhost:3300/files"
           : window.location.origin + "/files";
+      // const API_BASE = "http://192.168.101.60:3300/files";
       let currentFolderUuid = "root";
       let activeTaskCount = 0;
 
@@ -635,15 +636,17 @@
       function batchDownload() {
         const selected = document.querySelectorAll(".item-checkbox:checked");
         if (selected.length === 0) return;
+
+        const taskId = createTaskItem(`批量打包 (${selected.length}个项目)`);
+        updateTaskProgress(taskId, 20, "正在准备...");
+        log("开始批量打包下载...", "info");
+
         if (selected.length === 1) {
           const cb = selected[0];
           if (cb.dataset.type === "file") {
             downloadModeB(cb.dataset.id);
             unselectAll();
-            return;
-          } else if (cb.dataset.type === "folder") {
-            downloadFolder(cb.dataset.uuid);
-            unselectAll();
+            completeTask(taskId, true);
             return;
           }
         }
@@ -653,8 +656,17 @@
           if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
           else folderUuuids.push(cb.dataset.uuid);
         });
-        window.location.href = `${API_BASE}/batch-download?fileIds=${JSON.stringify(fileIds)}&folderUuuids=${JSON.stringify(folderUuuids)}`;
-        unselectAll();
+
+        setTimeout(() => {
+          window.location.href = `${API_BASE}/batch-download?fileIds=${JSON.stringify(fileIds)}&folderUuuids=${JSON.stringify(folderUuuids)}`;
+          updateTaskProgress(taskId, 80, "正在传输...");
+          unselectAll();
+          setTimeout(() => {
+            completeTask(taskId, true);
+            const statusEl = document.getElementById(`${taskId}-status`);
+            if (statusEl) statusEl.innerText = "已移交浏览器下载";
+          }, 3000);
+        }, 500);
       }
 
       async function batchDelete() {
@@ -711,14 +723,18 @@
         if (bar) bar.style.background = success ? "#5b8a72" : "#bc4749";
         activeTaskCount--;
         if (activeTaskCount <= 0) loadContent(currentFolderUuid);
+
+        setTimeout(() => {
+          closeManager();
+        }, 10000);
       }
 
       function clearCompleted() {
         document
           .querySelectorAll('.task-item[data-done="true"]')
           .forEach((item) => item.remove());
-        if (document.querySelectorAll(".task-item").length === 0)
-          document.getElementById("uploadManager").style.display = "none";
+        // if (document.querySelectorAll(".task-item").length === 0)
+        // document.getElementById("uploadManager").style.display = "none";
       }
       function closeManager() {
         document.getElementById("uploadManager").style.display = "none";
@@ -844,7 +860,24 @@
       }
 
       function downloadFolder(uuid) {
-        window.location.href = `${API_BASE}/folders/download/${uuid}`;
+        const taskId = createTaskItem("流式下载: 文件夹");
+        updateTaskProgress(taskId, 30, "正在连接...");
+        log("正在准备流式下载，请稍候...", "info");
+
+        // 先完成 UI 状态，给予用户“已成功移交”的反馈
+        setTimeout(() => {
+          updateTaskProgress(taskId, 100, "准备就绪");
+          completeTask(taskId, true);
+          const statusEl = document.getElementById(`${taskId}-status`);
+          if (statusEl) statusEl.innerText = "已移交浏览器下载";
+
+          log("下载请求已移交浏览器，系统弹窗即将出现", "success");
+
+          // UI 更新完成后，延迟一小会儿再触发真正的系统下载弹窗
+          setTimeout(() => {
+            window.location.href = `${API_BASE}/folders/download/${uuid}`;
+          }, 500);
+        }, 1200);
       }
       async function downloadModeB(id) {
         const res = await fetch(`${API_BASE}/presigned/download/${id}`);
