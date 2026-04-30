@@ -2,341 +2,735 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RustFS 智能云盘</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>🚀 Nuvia</title>
     <style>
       :root {
-        --primary: #2563eb;
-        --bg: #f8fafc;
-        --card: #ffffff;
+        --primary: #5c67f2;
+        --primary-bg: #eef0ff;
+        --success: #22c55e;
+        --success-bg: #f0fdf4;
+        --info: #3b82f6;
+        --info-bg: #eff6ff;
+        --danger: #ef4444;
+        --text-main: #2d3748;
+        --text-secondary: #718096;
+        --bg-gradient: linear-gradient(135deg, #f5f7ff 0%, #edeefc 100%);
+        --card-bg: rgba(255, 255, 255, 0.9);
+        --radius: 24px;
+        --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
       }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
       body {
-        font-family: "Segoe UI", system-ui, sans-serif;
-        background: var(--bg);
-        color: #334155;
-        max-width: 1000px;
-        margin: 30px auto;
-        padding: 20px;
+        font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--bg-gradient);
+        color: var(--text-main);
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        position: relative;
       }
+
+      /* Background Decorations */
+      body::before {
+        content: "";
+        position: fixed;
+        top: -10%;
+        right: -10%;
+        width: 40%;
+        height: 40%;
+        background: radial-gradient(
+          circle,
+          rgba(92, 103, 242, 0.1) 0%,
+          transparent 70%
+        );
+        z-index: -1;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        bottom: -5%;
+        left: -5%;
+        width: 30%;
+        height: 30%;
+        background: radial-gradient(
+          circle,
+          rgba(59, 130, 246, 0.1) 0%,
+          transparent 70%
+        );
+        z-index: -1;
+      }
+
+      .app-container {
+        max-width: 1200px;
+        height: 100vh;
+        margin: 0 auto;
+        padding: 2rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+
+      header {
+        text-align: center;
+        flex-shrink: 0;
+      }
+
+      h1 {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #1a365d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+      }
+
       .card {
-        background: var(--card);
-        border-radius: 12px;
-        padding: 24px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        margin-bottom: 24px;
+        background: var(--card-bg);
+        backdrop-filter: blur(10px);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 1.25rem 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        flex-shrink: 0;
       }
+
+      /* Breadcrumb */
       .breadcrumb {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 20px;
-        font-size: 14px;
-        background: white;
-        padding: 10px 15px;
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-      }
-      .breadcrumb-item {
-        color: var(--primary);
-        cursor: pointer;
+        gap: 0.75rem;
+        font-size: 0.95rem;
         font-weight: 500;
+        color: var(--text-secondary);
       }
+
+      .breadcrumb-item {
+        cursor: pointer;
+        transition: color 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
       .breadcrumb-item:hover {
-        text-decoration: underline;
+        color: var(--primary);
       }
-      .breadcrumb-separator {
-        color: #94a3b8;
-      }
+
+      /* Toolbar */
       .toolbar {
         display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        width: 100%;
       }
+
+      .main-actions {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
       .btn {
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 10px 18px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: 0.2s;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 0.5rem;
+        padding: 0.7rem 1.4rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        border-radius: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
       }
-      .btn:hover {
-        filter: brightness(1.1);
+
+      .btn-upload {
+        background: linear-gradient(135deg, #5c67f2 0%, #7c83f7 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(92, 103, 242, 0.3);
       }
-      .btn-danger {
-        background: #ef4444;
+
+      .btn-upload:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(92, 103, 242, 0.4);
       }
-      .btn-outline {
-        background: white;
-        border: 1px solid #cbd5e1;
-        color: #475569;
+
+      .btn-folder {
+        background-color: var(--info-bg);
+        color: var(--info);
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
+
+      .btn-new {
+        background-color: var(--success-bg);
+        color: var(--success);
       }
-      th {
-        text-align: left;
-        padding: 12px;
-        border-bottom: 2px solid #f1f5f9;
-        color: #64748b;
-        font-size: 13px;
+
+      .btn-refresh {
+        background-color: #f3f0ff;
+        color: #8b5cf6;
       }
-      td {
-        padding: 12px;
-        border-bottom: 1px solid #f1f5f9;
-        font-size: 14px;
+
+      .btn:hover:not(.btn-upload) {
+        filter: brightness(0.95);
+        transform: scale(1.02);
       }
-      .icon-folder {
-        color: #facc15;
-        font-size: 18px;
-        margin-right: 8px;
+
+      /* Batch Actions */
+      .batch-toolbar {
+        display: none;
+        align-items: center;
+        gap: 1rem;
+        margin-left: auto;
       }
-      .icon-file {
-        color: #94a3b8;
-        font-size: 18px;
-        margin-right: 8px;
+
+      .batch-toolbar.active {
+        display: flex;
       }
+
+      /* Table Header Card */
+      .table-header {
+        padding: 1rem 2rem;
+        display: grid;
+        grid-template-columns: 40px 1fr 100px 180px 150px;
+        align-items: center;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        background: var(--card-bg);
+        margin-bottom: -0.75rem; /* Reduce gap between header and list */
+      }
+
+      /* File List Wrapper */
+      .file-list-wrapper {
+        overflow-y: auto;
+        min-height: 0; /* Important for flex child with overflow */
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding-bottom: 0.5rem;
+        max-height: 300px;
+      }
+
+      .file-list-wrapper::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .file-list-wrapper::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 999px;
+      }
+
+      .file-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .file-item {
+        background: var(--card-bg);
+        padding: 1rem 2rem;
+        border-radius: 20px;
+        display: grid;
+        grid-template-columns: 40px 1fr 100px 180px 150px;
+        align-items: center;
+        transition: all 0.2s;
+        box-shadow: var(--shadow);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        flex-shrink: 0;
+      }
+
+      .file-item:hover {
+        border-color: var(--primary);
+      }
+
+      .file-name {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 500;
+      }
+
       .clickable {
         cursor: pointer;
         color: var(--primary);
-        font-weight: 500;
       }
-      .log-area {
-        font-family: monospace;
-        font-size: 12px;
-        background: #1e293b;
-        color: #cbd5e1;
-        padding: 15px;
-        border-radius: 8px;
+
+      .icon {
+        font-size: 1.4rem;
+      }
+
+      /* Log Area */
+      .log-card {
+        flex-shrink: 0;
         height: 150px;
         overflow-y: auto;
-        margin-top: 20px;
+        padding: 1rem 2rem;
       }
-      #progressBarParent {
-        height: 6px;
-        background: #e2e8f0;
-        border-radius: 3px;
-        margin-top: 10px;
+
+      .log-entry {
+        font-size: 0.8rem;
+        margin-bottom: 0.4rem;
+        display: flex;
+        gap: 0.75rem;
+        color: var(--text-secondary);
+      }
+
+      /* Task Manager */
+      .task-manager {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        width: 340px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
         display: none;
+        flex-direction: column;
+        z-index: 100;
+        border: 1px solid #edf2f7;
+        overflow: hidden;
       }
-      #progressBar {
+
+      .task-header {
+        padding: 1rem 1.5rem;
+        background: #f8fafc;
+        border-bottom: 1px solid #edf2f7;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--primary);
+      }
+
+      .task-list {
+        padding: 1.25rem 1.5rem;
+        max-height: 300px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+
+      .task-item {
+        font-size: 0.85rem;
+      }
+
+      .task-name {
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 180px;
+      }
+
+      .task-status {
+        font-weight: 600;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+
+      .task-progress-bg {
+        height: 8px;
+        background: #f1f5f9;
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 0.6rem;
+      }
+
+      .task-progress-bar {
         height: 100%;
-        background: var(--primary);
+        background: linear-gradient(90deg, #5c67f2, #7c83f7);
         width: 0%;
-        transition: 0.3s;
+        transition: width 0.3s ease;
+      }
+
+      @media (max-width: 768px) {
+        .table-header,
+        .file-item {
+          grid-template-columns: 40px 1fr 120px;
+        }
+        .col-size,
+        .col-date {
+          display: none;
+        }
+        .app-container {
+          padding: 1rem;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>🚀 RustFS 智能云盘</h1>
+    <div class="app-container">
+      <header>
+        <h1>🚀 Nuvia</h1>
+      </header>
 
-    <div class="breadcrumb" id="breadcrumb">
-      <span class="breadcrumb-item">全部文件</span>
+      <div class="card">
+        <div class="breadcrumb" id="breadcrumb">
+          <span class="breadcrumb-item">📁 全部文件</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="main-actions">
+            <button
+              class="btn btn-upload"
+              onclick="document.getElementById('fileInputB').click()"
+            >
+              ⚡ 极速直传
+            </button>
+            <button
+              class="btn btn-folder"
+              onclick="document.getElementById('folderInput').click()"
+            >
+              📁 上传文件夹
+            </button>
+            <button class="btn btn-new" onclick="promptCreateFolder()">
+              📁 新建目录
+            </button>
+            <button class="btn btn-refresh" onclick="refresh()">
+              🔄 刷新列表
+            </button>
+          </div>
+
+          <div class="batch-toolbar" id="batchToolbar">
+            <span
+              style="font-weight: 600; color: var(--primary)"
+              id="batchCount"
+              >已选: 0</span
+            >
+            <div style="display: flex; gap: 0.5rem">
+              <button
+                class="btn btn-folder"
+                style="padding: 0.5rem 1rem"
+                onclick="batchDownload()"
+              >
+                📦 批量下载
+              </button>
+              <button
+                class="btn btn-new"
+                style="
+                  background-color: #fee2e2;
+                  color: #ef4444;
+                  padding: 0.5rem 1rem;
+                "
+                onclick="batchDelete()"
+              >
+                🗑 批量删除
+              </button>
+              <button
+                class="btn btn-refresh"
+                style="padding: 0.5rem 1rem"
+                onclick="unselectAll()"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+
+          <input type="file" id="fileInputB" hidden onchange="uploadModeB()" />
+          <input
+            type="file"
+            id="folderInput"
+            hidden
+            webkitdirectory
+            onchange="uploadFolder()"
+          />
+        </div>
+      </div>
+
+      <div class="card table-header">
+        <div style="text-align: center">
+          <input type="checkbox" id="selectAll" onclick="toggleAll(this)" />
+        </div>
+        <div>名称</div>
+        <div class="col-size">大小</div>
+        <div class="col-date">修改日期</div>
+        <div style="text-align: right">操作</div>
+      </div>
+
+      <div class="file-list-wrapper">
+        <div class="file-list" id="contentList"></div>
+      </div>
+
+      <div class="card log-card" id="logArea"></div>
     </div>
 
-    <div class="toolbar">
-      <!-- 暂时隐藏中转上传 -->
-      <button
-        class="btn"
-        onclick="document.getElementById('fileInputA').click()"
-        style="display: none"
-      >
-        📄 中转上传
-      </button>
-      <button
-        class="btn btn-outline"
-        onclick="document.getElementById('fileInputB').click()"
-      >
-        ⚡ 极速直传
-      </button>
-      <button
-        class="btn btn-outline"
-        onclick="document.getElementById('folderInput').click()"
-      >
-        📁 上传文件夹
-      </button>
-      <button class="btn btn-outline" onclick="promptCreateFolder()">
-        📁 新建文件夹
-      </button>
-      <button class="btn btn-outline" onclick="refresh()">🔄 刷新</button>
-
-      <input type="file" id="fileInputA" hidden onchange="uploadModeA()" />
-      <input type="file" id="fileInputB" hidden onchange="uploadModeB()" />
-      <input
-        type="file"
-        id="folderInput"
-        hidden
-        webkitdirectory
-        onchange="uploadFolder()"
-      />
+    <div class="task-manager" id="uploadManager">
+      <div class="task-header">
+        <span>传输管理</span>
+        <div style="display: flex; gap: 0.5rem">
+          <button
+            class="btn btn-refresh"
+            style="padding: 4px 10px; font-size: 0.75rem"
+            onclick="clearCompleted()"
+          >
+            清理
+          </button>
+          <button
+            class="btn btn-refresh"
+            style="padding: 4px 10px; font-size: 0.75rem"
+            onclick="closeManager()"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+      <div class="task-list" id="taskList"></div>
     </div>
-
-    <div id="progressBarParent"><div id="progressBar"></div></div>
-
-    <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>名称</th>
-            <th style="width: 120px">大小</th>
-            <th style="width: 150px">上传时间</th>
-            <th style="width: 300px">操作</th>
-          </tr>
-        </thead>
-        <tbody id="contentList"></tbody>
-      </table>
-    </div>
-
-    <div class="log-area" id="logArea"></div>
 
     <script>
-      // const API_BASE = "http://192.168.101.60:3300/files";
-      const API_BASE = "http://localhost:3300/files";
-
+      const API_BASE =
+        window.location.protocol === "file:"
+          ? "http://localhost:3300/files"
+          : window.location.origin + "/files";
       let currentFolderUuid = "root";
+      let activeTaskCount = 0;
+
+      function formatDate(date) {
+        if (!date) return "-";
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const hours = String(d.getHours()).padStart(2, "0");
+        const minutes = String(d.getMinutes()).padStart(2, "0");
+        const seconds = String(d.getSeconds()).padStart(2, "0");
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      }
 
       function log(msg, type = "") {
         const area = document.getElementById("logArea");
         const div = document.createElement("div");
+        div.className = "log-entry";
         div.style.color =
           type === "error"
             ? "#f87171"
             : type === "success"
-              ? "#4ade80"
+              ? "#34d399"
               : "#cbd5e1";
-        div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        div.innerHTML = `> [${formatDate(new Date()).split(" ")[1]}] ${msg}`;
         area.insertBefore(div, area.firstChild);
       }
 
       async function loadContent(uuid = "root") {
         currentFolderUuid = uuid;
+        unselectAll();
         try {
           const res = await fetch(`${API_BASE}/content?folderUuid=${uuid}`);
+          if (!res.ok) throw new Error("Connection Error");
           const { folders, files } = await res.json();
-
           const bcRes = await fetch(
             `${API_BASE}/breadcrumbs?folderUuid=${uuid}`,
           );
           const bcData = await bcRes.json();
           renderBreadcrumbs(bcData);
-
           const list = document.getElementById("contentList");
           let html = "";
-
           folders.forEach((f) => {
             html += `
-                <tr>
-                    <td class="clickable" onclick="loadContent('${f.uuid}')">
-                        <span class="icon-folder">📁</span> ${f.displayName}
-                    </td>
-                    <td style="color:#94a3b8">-</td>
-                    <td style="color:#64748b; font-size:13px">${f.createdAt || "-"}</td>
-                    <td>
-                        <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadFolder('${f.uuid}')">⬇ 下载</button>
-                        <button class="btn btn-outline" style="padding:4px 8px; margin-left:8px" onclick="deleteFolder('${f.uuid}')">🗑 删除</button>
-                    </td>
-                </tr>
-            `;
+              <div class="file-item">
+                <div style="text-align:center;"><input type="checkbox" class="item-checkbox" data-type="folder" data-uuid="${f.uuid}" onchange="updateBatchToolbar()"></div>
+                <div class="file-name clickable" onclick="loadContent('${f.uuid}')">
+                  <span class="icon">📁</span>
+                  <span>${f.displayName}</span>
+                </div>
+                <div class="col-size" style="color:var(--text-secondary)">-</div>
+                <div class="col-date" style="color:var(--text-secondary)">${formatDate(f.createdAt)}</div>
+                <div style="text-align:right;">
+                  <button class="btn btn-folder" style="padding: 4px 10px; font-size: 0.75rem" onclick="event.stopPropagation(); downloadFolder('${f.uuid}')">打包</button>
+                  <button class="btn btn-new" style="background-color: #fee2e2; color: #ef4444; padding: 4px 10px; font-size: 0.75rem; margin-left: 0.5rem" onclick="event.stopPropagation(); deleteFolder('${f.uuid}')">删除</button>
+                </div>
+              </div>`;
           });
-
           files.forEach((f) => {
             html += `
-                <tr>
-                    <td><span class="icon-file">📄</span> ${f.originalName}</td>
-                    <td style="color:#64748b">${formatSize(f.size)}</td>
-                    <td style="color:#64748b; font-size:13px">${f.createdAt || "-"}</td>
-                    <td>
-                        <button class="btn btn-outline" style="padding:4px 8px; display: none;" onclick="downloadModeA(${f.id})">⬇ 普通</button>
-                        <button class="btn btn-outline" style="padding:4px 8px" onclick="downloadModeB(${f.id})">⚡ 加速</button>
-                        <button class="btn btn-danger" style="padding:4px 8px; margin-left:8px" onclick="deleteFile(${f.id})">🗑 删除</button>
-                    </td>                </tr>
-            `;
+              <div class="file-item">
+                <div style="text-align:center;"><input type="checkbox" class="item-checkbox" data-type="file" data-id="${f.id}" onchange="updateBatchToolbar()"></div>
+                <div class="file-name">
+                  <span class="icon">📄</span>
+                  <span>${f.originalName}</span>
+                </div>
+                <div class="col-size" style="color:var(--text-secondary)">${formatSize(f.size)}</div>
+                <div class="col-date" style="color:var(--text-secondary)">${formatDate(f.createdAt)}</div>
+                <div style="text-align:right;">
+                  <button class="btn btn-folder" style="padding: 4px 10px; font-size: 0.75rem" onclick="downloadModeB(${f.id})">下载</button>
+                  <button class="btn btn-new" style="background-color: #fee2e2; color: #ef4444; padding: 4px 10px; font-size: 0.75rem; margin-left: 0.5rem" onclick="deleteFile(${f.id})">删除</button>
+                </div>
+              </div>`;
           });
-
           list.innerHTML =
             html ||
-            '<tr><td colspan="4" style="text-align:center;color:#94a3b8">空空如也</td></tr>';
+            '<div class="card" style="text-align:center;color:var(--text-secondary);padding:4rem;font-size:0.9rem;">此文件夹为空</div>';
         } catch (e) {
-          log("加载失败: " + e.message, "error");
+          log("内容加载失败", "error");
         }
       }
 
       function renderBreadcrumbs(data) {
-        const container = document.getElementById("breadcrumb");
-        container.innerHTML = data
-          .map(
-            (item, index) => `
-            <span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${item.displayName}</span>
-            ${index < data.length - 1 ? '<span class="breadcrumb-separator">/</span>' : ""}
-        `,
-          )
+        document.getElementById("breadcrumb").innerHTML = data
+          .map((item, index) => {
+            const isRoot = index === 0 && item.displayName === "Root";
+            const icon = isRoot ? "🏠 " : "";
+            const displayName = isRoot ? "全部文件" : item.displayName;
+            return (
+              `<span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${icon}${displayName}</span>` +
+              (index < data.length - 1
+                ? '<span style="color: #cbd5e1; margin: 0 0.25rem;">/</span>'
+                : "")
+            );
+          })
           .join("");
+      }
+
+      function updateBatchToolbar() {
+        const checkedBoxes = document.querySelectorAll(
+          ".item-checkbox:checked",
+        );
+        const toolbar = document.getElementById("batchToolbar");
+        const countDisplay = document.getElementById("batchCount");
+        if (checkedBoxes.length > 0) {
+          toolbar.classList.add("active");
+          countDisplay.innerText = `已选中: ${checkedBoxes.length}`;
+        } else {
+          toolbar.classList.remove("active");
+        }
+      }
+
+      function toggleAll(master) {
+        document
+          .querySelectorAll(".item-checkbox")
+          .forEach((cb) => (cb.checked = master.checked));
+        updateBatchToolbar();
+      }
+
+      function unselectAll() {
+        const master = document.getElementById("selectAll");
+        if (master) master.checked = false;
+        document
+          .querySelectorAll(".item-checkbox")
+          .forEach((cb) => (cb.checked = false));
+        updateBatchToolbar();
       }
 
       async function refresh() {
         await loadContent(currentFolderUuid);
-        log("内容已刷新", "success");
+        log("同步成功", "success");
       }
 
-      async function uploadModeA() {
-        const fileInput = document.getElementById("fileInputA");
-        const file = fileInput.files[0];
-        if (!file) return;
-
-        if (file.size > 50 * 1024 * 1024) {
-          log("文件超过 50MB，请改用【极速直传】", "error");
-          fileInput.value = "";
-          return;
+      function batchDownload() {
+        const selected = document.querySelectorAll(".item-checkbox:checked");
+        if (selected.length === 0) return;
+        if (selected.length === 1) {
+          const cb = selected[0];
+          if (cb.dataset.type === "file") {
+            downloadModeB(cb.dataset.id);
+            unselectAll();
+            return;
+          } else if (cb.dataset.type === "folder") {
+            downloadFolder(cb.dataset.uuid);
+            unselectAll();
+            return;
+          }
         }
+        const fileIds = [];
+        const folderUuuids = [];
+        selected.forEach((cb) => {
+          if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
+          else folderUuuids.push(cb.dataset.uuid);
+        });
+        window.location.href = `${API_BASE}/batch-download?fileIds=${JSON.stringify(fileIds)}&folderUuuids=${JSON.stringify(folderUuuids)}`;
+        unselectAll();
+      }
 
-        const bar = document.getElementById("progressBar");
-        const barParent = document.getElementById("progressBarParent");
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("folderUuid", currentFolderUuid);
-
+      async function batchDelete() {
+        const selected = document.querySelectorAll(".item-checkbox:checked");
+        if (selected.length === 0) return;
+        if (!confirm(`确定要移除选中的 ${selected.length} 个项目吗？`)) return;
+        const fileIds = [];
+        const folderUuuids = [];
+        selected.forEach((cb) => {
+          if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
+          else folderUuuids.push(cb.dataset.uuid);
+        });
         try {
-          bar.style.width = "0%";
-          barParent.style.display = "block";
-          log(`[Mode A] 正在上传...`);
-          const xhr = new XMLHttpRequest();
-          xhr.open("POST", `${API_BASE}/upload`);
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable)
-              bar.style.width = (e.loaded / e.total) * 100 + "%";
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              log("上传成功", "success");
-              loadContent(currentFolderUuid);
-            } else {
-              log("上传失败", "error");
-            }
-            setTimeout(() => (barParent.style.display = "none"), 1000);
-          };
-          xhr.send(fd);
-        } finally {
-          fileInput.value = "";
+          const res = await fetch(`${API_BASE}/batch-delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileIds, folderUuuids }),
+          });
+          if (res.ok) {
+            log("批量操作成功", "success");
+            refresh();
+          }
+        } catch (e) {
+          log("操作异常", "error");
         }
+      }
+
+      function createTaskItem(name) {
+        activeTaskCount++;
+        document.getElementById("uploadManager").style.display = "flex";
+        const id =
+          "task-" + Date.now() + Math.random().toString(36).substr(2, 5);
+        document
+          .getElementById("taskList")
+          .insertAdjacentHTML(
+            "afterbegin",
+            `<div class="task-item" id="${id}" data-done="false"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span class="task-name" title="${name}">${name}</span><span class="task-status" id="${id}-status">WAITING</span></div><div class="task-progress-bg"><div class="task-progress-bar" id="${id}-bar"></div></div></div>`,
+          );
+        return id;
+      }
+
+      function updateTaskProgress(id, percent, status) {
+        const bar = document.getElementById(`${id}-bar`);
+        const statusEl = document.getElementById(`${id}-status`);
+        if (bar) bar.style.width = percent + "%";
+        if (statusEl && status) statusEl.innerText = status;
+      }
+
+      function completeTask(id, success = true) {
+        const item = document.getElementById(id);
+        if (item) item.setAttribute("data-done", "true");
+        updateTaskProgress(id, 100, success ? "DONE" : "FAILED");
+        const bar = document.getElementById(`${id}-bar`);
+        if (bar) bar.style.background = success ? "#5b8a72" : "#bc4749";
+        activeTaskCount--;
+        if (activeTaskCount <= 0) loadContent(currentFolderUuid);
+      }
+
+      function clearCompleted() {
+        document
+          .querySelectorAll('.task-item[data-done="true"]')
+          .forEach((item) => item.remove());
+        if (document.querySelectorAll(".task-item").length === 0)
+          document.getElementById("uploadManager").style.display = "none";
+      }
+      function closeManager() {
+        document.getElementById("uploadManager").style.display = "none";
       }
 
       async function uploadModeB() {
-        const fileInput = document.getElementById("fileInputB");
-        const file = fileInput.files[0];
+        const input = document.getElementById("fileInputB");
+        const file = input.files[0];
         if (!file) return;
-
-        const bar = document.getElementById("progressBar");
-        const barParent = document.getElementById("progressBarParent");
-
+        const taskId = createTaskItem(file.name);
         try {
-          log(`[Mode B] 申请加速通道...`);
-          const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
+          const res = await fetch(`${API_BASE}/presigned/upload-url`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -345,20 +739,17 @@
               folderUuid: currentFolderUuid,
             }),
           });
-          const signData = await signRes.json();
-
-          bar.style.width = "0%";
-          barParent.style.display = "block";
-          log(`[Mode B] 正在直传至 RustFS...`);
+          const signData = await res.json();
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", signData.uploadUrl);
           xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable)
-              bar.style.width = (e.loaded / e.total) * 100 + "%";
+            if (e.lengthComputable) {
+              const p = Math.floor((e.loaded / e.total) * 90);
+              updateTaskProgress(taskId, p, `UPLOADING ${p}%`);
+            }
           };
           xhr.onload = async () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              log(`[Mode B] 同步元数据...`);
               await fetch(`${API_BASE}/presigned/callback`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -370,14 +761,17 @@
                   folderUuid: currentFolderUuid,
                 }),
               });
-              log("直传成功", "success");
-              loadContent(currentFolderUuid);
+              completeTask(taskId, true);
+            } else {
+              completeTask(taskId, false);
             }
-            setTimeout(() => (barParent.style.display = "none"), 1000);
           };
+          xhr.onerror = () => completeTask(taskId, false);
           xhr.send(file);
+        } catch (e) {
+          completeTask(taskId, false);
         } finally {
-          fileInput.value = "";
+          input.value = "";
         }
       }
 
@@ -385,21 +779,17 @@
         const input = document.getElementById("folderInput");
         const files = Array.from(input.files);
         if (files.length === 0) return;
-
-        log(`[Folder] 准备上传，共 ${files.length} 个文件...`);
-        const bar = document.getElementById("progressBar");
-        const barParent = document.getElementById("progressBarParent");
-        barParent.style.display = "block";
-
-        const folderCache = { "": currentFolderUuid };
-
+        const baseFolderUuid = currentFolderUuid;
+        const mainTaskId = createTaskItem(
+          `FOLDER: ${files[0].webkitRelativePath.split("/")[0]}`,
+        );
+        const folderCache = { "": baseFolderUuid };
         try {
           for (let i = 0; i < files.length; i++) {
             const file = files[i];
             const pathParts = file.webkitRelativePath.split("/");
             const dirParts = pathParts.slice(0, -1);
-
-            let lastParentUuid = currentFolderUuid;
+            let lastParentUuid = baseFolderUuid;
             let currentPath = "";
             for (const part of dirParts) {
               currentPath += (currentPath ? "/" : "") + part;
@@ -417,8 +807,11 @@
               }
               lastParentUuid = folderCache[currentPath];
             }
-
-            bar.style.width = ((i / files.length) * 100).toFixed(0) + "%";
+            updateTaskProgress(
+              mainTaskId,
+              Math.floor((i / files.length) * 100),
+              `${i + 1}/${files.length}`,
+            );
             const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -429,7 +822,6 @@
               }),
             });
             const signData = await signRes.json();
-
             await fetch(signData.uploadUrl, { method: "PUT", body: file });
             await fetch(`${API_BASE}/presigned/callback`, {
               method: "POST",
@@ -443,78 +835,62 @@
               }),
             });
           }
-          log("文件夹上传成功", "success");
-          loadContent(currentFolderUuid);
+          completeTask(mainTaskId, true);
         } catch (e) {
-          log("上传失败: " + e.message, "error");
+          completeTask(mainTaskId, false);
         } finally {
-          barParent.style.display = "none";
           input.value = "";
         }
       }
 
       function downloadFolder(uuid) {
-        log("正在准备压缩包，请稍候...");
         window.location.href = `${API_BASE}/folders/download/${uuid}`;
-      }
-
-      async function promptCreateFolder() {
-        const name = prompt("请输入文件夹名称:");
-        if (!name) return;
-        const res = await fetch(`${API_BASE}/folders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            parentId: currentFolderUuid === "root" ? null : currentFolderUuid,
-          }),
-        });
-        if (res.ok) {
-          log(`文件夹 "${name}" 创建成功`, "success");
-          loadContent(currentFolderUuid);
-        }
-      }
-
-      async function deleteFolder(uuid) {
-        if (!confirm("确定递归删除吗？内容将永久清除！")) return;
-        const res = await fetch(`${API_BASE}/folders/${uuid}`, {
-          method: "DELETE",
-        });
-        if (res.ok) {
-          log("已清理", "success");
-          loadContent(currentFolderUuid);
-        }
-      }
-
-      async function deleteFile(id) {
-        if (!confirm("确定删除文件吗？")) return;
-        const res = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
-        if (res.ok) {
-          log("已删除", "success");
-          loadContent(currentFolderUuid);
-        }
-      }
-
-      function formatSize(bytes) {
-        if (bytes === 0) return "0 B";
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return (
-          (bytes / Math.pow(1024, i)).toFixed(2) +
-          " " +
-          ["B", "KB", "MB", "GB"][i]
-        );
-      }
-
-      function downloadModeA(id) {
-        window.location.href = `${API_BASE}/download/${id}`;
       }
       async function downloadModeB(id) {
         const res = await fetch(`${API_BASE}/presigned/download/${id}`);
         const data = await res.json();
         window.open(data.url, "_blank");
       }
-
+      async function deleteFile(id) {
+        if (confirm("确定移除此文件？")) {
+          await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
+          refresh();
+        }
+      }
+      async function deleteFolder(uuid) {
+        if (confirm("确定移除此文件夹及其内容？")) {
+          await fetch(`${API_BASE}/folders/${uuid}`, { method: "DELETE" });
+          refresh();
+        }
+      }
+      async function promptCreateFolder() {
+        const name = prompt("新建文件夹名称:");
+        if (name) {
+          await fetch(`${API_BASE}/folders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name,
+              parentId: currentFolderUuid === "root" ? null : currentFolderUuid,
+            }),
+          });
+          refresh();
+        }
+      }
+      function formatSize(bytes) {
+        if (bytes === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+      }
       loadContent("root");
+      window.addEventListener("beforeunload", (e) => {
+        if (activeTaskCount > 0) {
+          e.preventDefault();
+          e.returnValue = "文件传输中，确认离开？";
+        }
+      });
     </script>
   </body>
 </html>

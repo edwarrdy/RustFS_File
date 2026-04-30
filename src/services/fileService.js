@@ -324,6 +324,94 @@ class FileService {
     return this.listAllStmt.all(); // 同步获取列表
   }
 
+  // --- 批量操作 ---
+  async batchDelete(fileIds = [], folderUuuids = []) {
+    const results = { files: 0, folders: 0 };
+
+    // 1. 删除文件
+    for (const id of fileIds) {
+      try {
+        await this.deleteFile(id);
+        results.files++;
+      } catch (e) {
+        console.error(`[Batch Delete] 文件 ${id} 删除失败:`, e.message);
+      }
+    }
+
+    // 2. 删除文件夹
+    for (const uuid of folderUuuids) {
+      try {
+        await this.deleteFolder(uuid);
+        results.folders++;
+      } catch (e) {
+        console.error(`[Batch Delete] 文件夹 ${uuid} 删除失败:`, e.message);
+      }
+    }
+
+    return results;
+  }
+
+  async getBatchZipStream(fileIds = [], folderUuuids = []) {
+    const archive = archiver("zip", { zlib: { level: 5 } });
+
+    const appendItemsRecursive = async (fileIds, folderUuuids, relativePath = "") => {
+      // 添加选中的文件
+      for (const id of fileIds) {
+        const file = this.findFileByIdStmt.get(id);
+        if (file) {
+          try {
+            const response = await s3Client.send(new GetObjectCommand({
+              Bucket: file.bucket,
+              Key: file.uuidName
+            }));
+            archive.append(response.Body, { name: path.join(relativePath, file.originalName) });
+          } catch (err) {
+            console.error(`[Batch Zip Error] 无法读取文件 ${file.originalName}:`, err.message);
+          }
+        }
+      }
+
+      // 添加选中的文件夹及其内容
+      for (const uuid of folderUuuids) {
+        const folder = this.findFolderByUuidStmt.get(uuid);
+        if (folder) {
+          const innerPath = path.join(relativePath, folder.displayName);
+          
+          // 获取文件夹下的文件
+          const files = this.listFilesByFolderStmt.all(uuid);
+          for (const f of files) {
+            try {
+              const response = await s3Client.send(new GetObjectCommand({
+                Bucket: f.bucket,
+                Key: f.uuidName
+              }));
+              archive.append(response.Body, { name: path.join(innerPath, f.originalName) });
+            } catch (err) {
+              console.error(`[Batch Zip Error] 无法读取文件 ${f.originalName}:`, err.message);
+            }
+          }
+
+          // 递归处理子文件夹
+          const subFolders = this.listSubFoldersStmt.all(uuid);
+          const subIds = []; // 顶层 batch 不需要文件 ID
+          const subUuuids = subFolders.map(sf => sf.uuid);
+          await appendItemsRecursive([], subUuuids, innerPath);
+        }
+      }
+    };
+
+    (async () => {
+      try {
+        await appendItemsRecursive(fileIds, folderUuuids);
+        await archive.finalize();
+      } catch (e) {
+        archive.emit('error', e);
+      }
+    })();
+
+    return archive;
+  }
+
   // --- 获取面包屑导航 ---
   async getBreadcrumbs(folderUuid) {
     const breadcrumbs = [];

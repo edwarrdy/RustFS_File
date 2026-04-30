@@ -30,6 +30,10 @@ router.post("/presigned/callback", fileController.uploadCallback);
 // 模式 B 路由
 router.get("/presigned/download/:id", fileController.getDownloadUrl);
 
+// --- 批量操作 ---
+router.post("/batch-delete", fileController.batchDelete);
+router.get("/batch-download", fileController.batchDownload);
+
 // --- 通用管理 ---
 router.get("/", fileController.list);
 router.delete("/:id", fileController.remove);

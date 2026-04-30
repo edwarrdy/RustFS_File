@@ -148,6 +148,42 @@ exports.downloadFolder = async (req, res) => {
   }
 };
 
+// 批量删除
+exports.batchDelete = async (req, res) => {
+  try {
+    const { fileIds, folderUuuids } = req.body;
+    const result = await fileService.batchDelete(fileIds, folderUuuids);
+    res.json({ message: "批量删除完成", data: result });
+  } catch (error) {
+    res.status(500).json({ error: "批量删除失败" });
+  }
+};
+
+// 批量下载
+exports.batchDownload = async (req, res) => {
+  try {
+    const { fileIds, folderUuuids } = req.query;
+    // 解析 JSON 字符串
+    const fIds = fileIds ? JSON.parse(fileIds) : [];
+    const fUuuids = folderUuuids ? JSON.parse(folderUuuids) : [];
+
+    const stream = await fileService.getBatchZipStream(fIds, fUuuids);
+
+    res.setHeader("Content-Type", "application/zip");
+    const filename = `batch_download_${Date.now()}.zip`;
+    const encodedName = encodeURIComponent(filename);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodedName}`,
+    );
+
+    stream.pipe(res);
+  } catch (error) {
+    console.error("[Batch Download Error]", error);
+    res.status(500).send("批量下载失败");
+  }
+};
+
 exports.getBreadcrumbs = async (req, res) => {
   try {
     const { folderUuid } = req.query;
