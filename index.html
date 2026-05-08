@@ -442,7 +442,7 @@
             </div>
           </div>
 
-          <input type="file" id="fileInputB" hidden onchange="uploadModeB()" />
+          <input type="file" id="fileInputB" hidden multiple onchange="uploadModeB()" />
           <input
             type="file"
             id="folderInput"
@@ -494,11 +494,20 @@
     </div>
 
     <script>
-      const API_BASE =
-        window.location.protocol === "file:"
-          ? "http://localhost:3300/files"
-          : window.location.origin + "/files";
-      // const API_BASE = "http://192.168.101.60:3300/files";
+      // 自动识别后端地址：如果是从文件系统打开则连 localhost，否则连当前网页的同源服务器
+      const API_BASE = (function() {
+        if (window.location.protocol === "file:") {
+          return "http://localhost:3300/files";
+        }
+        // 动态获取当前访问的 IP/域名 和 端口
+        const host = window.location.hostname;
+        const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        // 如果后端端口与前端不同（比如前端 80 后端 3300），建议在生产环境通过 Nginx 转发
+        // 这里默认指向 3300 端口，除非前端本身就在 3300 运行
+        const targetPort = window.location.port === "3300" ? "3300" : "3300"; 
+        return `${window.location.protocol}//${host}:${targetPort}/files`;
+      })();
+
       let currentFolderUuid = "root";
       let activeTaskCount = 0;
 
@@ -526,6 +535,32 @@
               : "#cbd5e1";
         div.innerHTML = `> [${formatDate(new Date()).split(" ")[1]}] ${msg}`;
         area.insertBefore(div, area.firstChild);
+      }
+
+      function getFileIcon(filename) {
+        if (!filename) return "📄";
+        const ext = filename.split(".").pop().toLowerCase();
+        const iconMap = {
+          // 图片
+          jpg: "🖼️", jpeg: "🖼️", png: "🖼️", gif: "🖼️", webp: "🖼️", svg: "🖼️",
+          // 视频
+          mp4: "🎬", mkv: "🎬", mov: "🎬", avi: "🎬",
+          // 音频
+          mp3: "🎵", wav: "🎵", flac: "🎵", ogg: "🎵",
+          // 文档
+          pdf: "📕",
+          doc: "📘", docx: "📘",
+          xls: "📊", xlsx: "📊", csv: "📊",
+          ppt: "📙", pptx: "📙",
+          txt: "📝", md: "📝",
+          // 压缩包
+          zip: "📦", rar: "📦", "7z": "📦", tar: "📦", gz: "📦",
+          // 代码
+          js: "💻", html: "💻", css: "💻", py: "💻", rs: "💻", go: "💻", java: "💻", c: "💻", cpp: "💻", json: "💻",
+          // 执行文件
+          exe: "⚙️", msi: "⚙️", sh: "⚙️", bat: "⚙️"
+        };
+        return iconMap[ext] || "📄";
       }
 
       async function loadContent(uuid = "root") {
@@ -563,7 +598,7 @@
               <div class="file-item">
                 <div style="text-align:center;"><input type="checkbox" class="item-checkbox" data-type="file" data-id="${f.id}" onchange="updateBatchToolbar()"></div>
                 <div class="file-name">
-                  <span class="icon">📄</span>
+                  <span class="icon">${getFileIcon(f.originalName)}</span>
                   <span>${f.originalName}</span>
                 </div>
                 <div class="col-size" style="color:var(--text-secondary)">${formatSize(f.size)}</div>
@@ -742,53 +777,58 @@
 
       async function uploadModeB() {
         const input = document.getElementById("fileInputB");
-        const file = input.files[0];
-        if (!file) return;
-        const taskId = createTaskItem(file.name);
-        try {
-          const res = await fetch(`${API_BASE}/presigned/upload-url`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              filename: file.name,
-              mimetype: file.type || "application/octet-stream",
-              folderUuid: currentFolderUuid,
-            }),
-          });
-          const signData = await res.json();
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", signData.uploadUrl);
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              const p = Math.floor((e.loaded / e.total) * 90);
-              updateTaskProgress(taskId, p, `UPLOADING ${p}%`);
-            }
-          };
-          xhr.onload = async () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              await fetch(`${API_BASE}/presigned/callback`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  key: signData.key,
-                  originalName: file.name,
-                  mimetype: file.type || "application/octet-stream",
-                  size: file.size,
-                  folderUuid: currentFolderUuid,
-                }),
-              });
-              completeTask(taskId, true);
-            } else {
-              completeTask(taskId, false);
-            }
-          };
-          xhr.onerror = () => completeTask(taskId, false);
-          xhr.send(file);
-        } catch (e) {
-          completeTask(taskId, false);
-        } finally {
-          input.value = "";
+        const files = Array.from(input.files);
+        if (files.length === 0) return;
+
+        for (const file of files) {
+          const taskId = createTaskItem(file.name);
+          // 使用闭包或立即执行函数确保每个文件有自己的上传逻辑，或者直接顺序上传
+          try {
+            const res = await fetch(`${API_BASE}/presigned/upload-url`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                filename: file.name,
+                mimetype: file.type || "application/octet-stream",
+                folderUuid: currentFolderUuid,
+              }),
+            });
+            const signData = await res.json();
+            
+            const xhr = new XMLHttpRequest();
+            xhr.open("PUT", signData.uploadUrl);
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                const p = Math.floor((e.loaded / e.total) * 90);
+                updateTaskProgress(taskId, p, `上传中 ${p}%`);
+              }
+            };
+            
+            xhr.onload = async () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                await fetch(`${API_BASE}/presigned/callback`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    key: signData.key,
+                    originalName: file.name,
+                    mimetype: file.type || "application/octet-stream",
+                    size: file.size,
+                    folderUuid: currentFolderUuid,
+                  }),
+                });
+                completeTask(taskId, true);
+              } else {
+                completeTask(taskId, false);
+              }
+            };
+            xhr.onerror = () => completeTask(taskId, false);
+            xhr.send(file);
+          } catch (e) {
+            completeTask(taskId, false);
+          }
         }
+        input.value = "";
       }
 
       async function uploadFolder() {
