@@ -370,9 +370,47 @@
           padding: 1rem;
         }
       }
+
+      /* Drag & Drop Overlay */
+      .drop-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(92, 103, 242, 0.15);
+        backdrop-filter: blur(4px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+        border: 4px dashed var(--primary);
+        pointer-events: none;
+      }
+      .drop-overlay.active {
+        display: flex;
+      }
+      .drop-msg {
+        background: white;
+        padding: 2rem 4rem;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary);
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
     </style>
   </head>
   <body>
+    <div class="drop-overlay" id="dropOverlay">
+      <div class="drop-msg">释放文件立即上传 🚀</div>
+    </div>
     <div class="app-container">
       <header>
         <h1>🚀 Nuvia</h1>
@@ -775,14 +813,49 @@
         document.getElementById("uploadManager").style.display = "none";
       }
 
+      // Drag & Drop Logic
+      const dropOverlay = document.getElementById('dropOverlay');
+      let dragCounter = 0;
+
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        dropOverlay.classList.add('active');
+      });
+
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) {
+          dropOverlay.classList.remove('active');
+        }
+      });
+
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dropOverlay.classList.remove('active');
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+          uploadFiles(files);
+        }
+      });
+
       async function uploadModeB() {
         const input = document.getElementById("fileInputB");
         const files = Array.from(input.files);
         if (files.length === 0) return;
+        await uploadFiles(files);
+        input.value = "";
+      }
 
+      async function uploadFiles(files) {
         for (const file of files) {
           const taskId = createTaskItem(file.name);
-          // 使用闭包或立即执行函数确保每个文件有自己的上传逻辑，或者直接顺序上传
           try {
             const res = await fetch(`${API_BASE}/presigned/upload-url`, {
               method: "POST",
@@ -828,7 +901,6 @@
             completeTask(taskId, false);
           }
         }
-        input.value = "";
       }
 
       async function uploadFolder() {
