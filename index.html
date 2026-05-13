@@ -182,6 +182,11 @@
         color: #8b5cf6;
       }
 
+      .btn-move {
+        background-color: #e0e7ff;
+        color: #4338ca;
+      }
+
       .btn:hover:not(.btn-upload) {
         filter: brightness(0.95);
         transform: scale(1.02);
@@ -357,6 +362,68 @@
         transition: width 0.3s ease;
       }
 
+      /* Modal */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 3000;
+      }
+      .modal-overlay.active {
+        display: flex;
+      }
+      .modal {
+        background: white;
+        width: 400px;
+        max-width: 90%;
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .modal-header {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--text-main);
+      }
+      .folder-tree {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #edf2f7;
+        border-radius: 12px;
+        padding: 0.5rem;
+      }
+      .folder-tree-item {
+        padding: 0.5rem;
+        cursor: pointer;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: background 0.2s;
+      }
+      .folder-tree-item:hover {
+        background: var(--primary-bg);
+      }
+      .folder-tree-item.selected {
+        background: var(--primary);
+        color: white;
+      }
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+      }
+
       @media (max-width: 768px) {
         .table-header,
         .file-item {
@@ -460,6 +527,13 @@
                 📦 批量下载
               </button>
               <button
+                class="btn btn-move"
+                style="padding: 0.5rem 1rem"
+                onclick="openMoveModal()"
+              >
+                🚚 批量移动
+              </button>
+              <button
                 class="btn btn-new"
                 style="
                   background-color: #fee2e2;
@@ -531,23 +605,31 @@
       <div class="task-list" id="taskList"></div>
     </div>
 
+    <div class="modal-overlay" id="moveModal">
+      <div class="modal">
+        <div class="modal-header">移动到...</div>
+        <div class="folder-tree" id="folderTree"></div>
+        <div class="modal-footer">
+          <button class="btn btn-refresh" onclick="closeMoveModal()">取消</button>
+          <button class="btn btn-upload" onclick="executeBatchMove()">确认移动</button>
+        </div>
+      </div>
+    </div>
+
     <script>
-      // 自动识别后端地址：如果是从文件系统打开则连 localhost，否则连当前网页的同源服务器
+      // 自动识别后端地址
       const API_BASE = (function() {
         if (window.location.protocol === "file:") {
           return "http://localhost:3300/files";
         }
-        // 动态获取当前访问的 IP/域名 和 端口
         const host = window.location.hostname;
-        const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-        // 如果后端端口与前端不同（比如前端 80 后端 3300），建议在生产环境通过 Nginx 转发
-        // 这里默认指向 3300 端口，除非前端本身就在 3300 运行
-        const targetPort = window.location.port === "3300" ? "3300" : "3300"; 
-        return `${window.location.protocol}//${host}:${targetPort}/files`;
+        const port = "3300"; 
+        return `${window.location.protocol}//${host}:${port}/files`;
       })();
 
       let currentFolderUuid = "root";
       let activeTaskCount = 0;
+      let selectedTargetUuid = null;
 
       function formatDate(date) {
         if (!date) return "-";
@@ -565,12 +647,7 @@
         const area = document.getElementById("logArea");
         const div = document.createElement("div");
         div.className = "log-entry";
-        div.style.color =
-          type === "error"
-            ? "#f87171"
-            : type === "success"
-              ? "#34d399"
-              : "#cbd5e1";
+        div.style.color = type === "error" ? "#f87171" : type === "success" ? "#34d399" : "#cbd5e1";
         div.innerHTML = `> [${formatDate(new Date()).split(" ")[1]}] ${msg}`;
         area.insertBefore(div, area.firstChild);
       }
@@ -579,23 +656,13 @@
         if (!filename) return "📄";
         const ext = filename.split(".").pop().toLowerCase();
         const iconMap = {
-          // 图片
           jpg: "🖼️", jpeg: "🖼️", png: "🖼️", gif: "🖼️", webp: "🖼️", svg: "🖼️",
-          // 视频
           mp4: "🎬", mkv: "🎬", mov: "🎬", avi: "🎬",
-          // 音频
           mp3: "🎵", wav: "🎵", flac: "🎵", ogg: "🎵",
-          // 文档
-          pdf: "📕",
-          doc: "📘", docx: "📘",
-          xls: "📊", xlsx: "📊", csv: "📊",
-          ppt: "📙", pptx: "📙",
-          txt: "📝", md: "📝",
-          // 压缩包
+          pdf: "📕", doc: "📘", docx: "📘", xls: "📊", xlsx: "📊", csv: "📊",
+          ppt: "📙", pptx: "📙", txt: "📝", md: "📝",
           zip: "📦", rar: "📦", "7z": "📦", tar: "📦", gz: "📦",
-          // 代码
           js: "💻", html: "💻", css: "💻", py: "💻", rs: "💻", go: "💻", java: "💻", c: "💻", cpp: "💻", json: "💻",
-          // 执行文件
           exe: "⚙️", msi: "⚙️", sh: "⚙️", bat: "⚙️"
         };
         return iconMap[ext] || "📄";
@@ -608,9 +675,7 @@
           const res = await fetch(`${API_BASE}/content?folderUuid=${uuid}`);
           if (!res.ok) throw new Error("Connection Error");
           const { folders, files } = await res.json();
-          const bcRes = await fetch(
-            `${API_BASE}/breadcrumbs?folderUuid=${uuid}`,
-          );
+          const bcRes = await fetch(`${API_BASE}/breadcrumbs?folderUuid=${uuid}`);
           const bcData = await bcRes.json();
           renderBreadcrumbs(bcData);
           const list = document.getElementById("contentList");
@@ -647,34 +712,23 @@
                 </div>
               </div>`;
           });
-          list.innerHTML =
-            html ||
-            '<div class="card" style="text-align:center;color:var(--text-secondary);padding:4rem;font-size:0.9rem;">此文件夹为空</div>';
+          list.innerHTML = html || '<div class="card" style="text-align:center;color:var(--text-secondary);padding:4rem;font-size:0.9rem;">此文件夹为空</div>';
         } catch (e) {
           log("内容加载失败", "error");
         }
       }
 
       function renderBreadcrumbs(data) {
-        document.getElementById("breadcrumb").innerHTML = data
-          .map((item, index) => {
-            const isRoot = index === 0 && item.displayName === "Root";
-            const icon = isRoot ? "🏠 " : "";
-            const displayName = isRoot ? "全部文件" : item.displayName;
-            return (
-              `<span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${icon}${displayName}</span>` +
-              (index < data.length - 1
-                ? '<span style="color: #cbd5e1; margin: 0 0.25rem;">/</span>'
-                : "")
-            );
-          })
-          .join("");
+        document.getElementById("breadcrumb").innerHTML = data.map((item, index) => {
+          const isRoot = index === 0 && item.displayName === "Root";
+          const icon = isRoot ? "🏠 " : "";
+          const displayName = isRoot ? "全部文件" : item.displayName;
+          return `<span class="breadcrumb-item" onclick="loadContent('${item.uuid}')">${icon}${displayName}</span>` + (index < data.length - 1 ? '<span style="color: #cbd5e1; margin: 0 0.25rem;">/</span>' : "");
+        }).join("");
       }
 
       function updateBatchToolbar() {
-        const checkedBoxes = document.querySelectorAll(
-          ".item-checkbox:checked",
-        );
+        const checkedBoxes = document.querySelectorAll(".item-checkbox:checked");
         const toolbar = document.getElementById("batchToolbar");
         const countDisplay = document.getElementById("batchCount");
         if (checkedBoxes.length > 0) {
@@ -686,60 +740,20 @@
       }
 
       function toggleAll(master) {
-        document
-          .querySelectorAll(".item-checkbox")
-          .forEach((cb) => (cb.checked = master.checked));
+        document.querySelectorAll(".item-checkbox").forEach((cb) => (cb.checked = master.checked));
         updateBatchToolbar();
       }
 
       function unselectAll() {
         const master = document.getElementById("selectAll");
         if (master) master.checked = false;
-        document
-          .querySelectorAll(".item-checkbox")
-          .forEach((cb) => (cb.checked = false));
+        document.querySelectorAll(".item-checkbox").forEach((cb) => (cb.checked = false));
         updateBatchToolbar();
       }
 
       async function refresh() {
         await loadContent(currentFolderUuid);
         log("同步成功", "success");
-      }
-
-      function batchDownload() {
-        const selected = document.querySelectorAll(".item-checkbox:checked");
-        if (selected.length === 0) return;
-
-        const taskId = createTaskItem(`批量打包 (${selected.length}个项目)`);
-        updateTaskProgress(taskId, 20, "正在准备...");
-        log("开始批量打包下载...", "info");
-
-        if (selected.length === 1) {
-          const cb = selected[0];
-          if (cb.dataset.type === "file") {
-            downloadModeB(cb.dataset.id);
-            unselectAll();
-            completeTask(taskId, true);
-            return;
-          }
-        }
-        const fileIds = [];
-        const folderUuuids = [];
-        selected.forEach((cb) => {
-          if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
-          else folderUuuids.push(cb.dataset.uuid);
-        });
-
-        setTimeout(() => {
-          window.location.href = `${API_BASE}/batch-download?fileIds=${JSON.stringify(fileIds)}&folderUuuids=${JSON.stringify(folderUuuids)}`;
-          updateTaskProgress(taskId, 80, "正在传输...");
-          unselectAll();
-          setTimeout(() => {
-            completeTask(taskId, true);
-            const statusEl = document.getElementById(`${taskId}-status`);
-            if (statusEl) statusEl.innerText = "已移交浏览器下载";
-          }, 3000);
-        }, 500);
       }
 
       async function batchDelete() {
@@ -767,17 +781,94 @@
         }
       }
 
+      function batchDownload() {
+        const selected = document.querySelectorAll(".item-checkbox:checked");
+        if (selected.length === 0) return;
+        const taskId = createTaskItem(`批量打包 (${selected.length}个项目)`);
+        updateTaskProgress(taskId, 20, "正在准备...");
+        const fileIds = [];
+        const folderUuuids = [];
+        selected.forEach((cb) => {
+          if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
+          else folderUuuids.push(cb.dataset.uuid);
+        });
+        setTimeout(() => {
+          window.location.href = `${API_BASE}/batch-download?fileIds=${JSON.stringify(fileIds)}&folderUuuids=${JSON.stringify(folderUuuids)}`;
+          updateTaskProgress(taskId, 80, "正在传输...");
+          unselectAll();
+          setTimeout(() => {
+            completeTask(taskId, true);
+          }, 3000);
+        }, 500);
+      }
+
+      async function openMoveModal() {
+        const modal = document.getElementById("moveModal");
+        modal.classList.add("active");
+        await loadFolderTree();
+      }
+
+      function closeMoveModal() {
+        document.getElementById("moveModal").classList.remove("active");
+        selectedTargetUuid = null;
+      }
+
+      async function loadFolderTree() {
+        const tree = document.getElementById("folderTree");
+        tree.innerHTML = "加载中...";
+        try {
+          const res = await fetch(`${API_BASE}/content?folderUuid=root`);
+          const data = await res.json();
+          let html = `<div class="folder-tree-item ${selectedTargetUuid === 'root' ? 'selected' : ''}" onclick="selectTarget('root')">🏠 全部文件 (根目录)</div>`;
+          data.folders.forEach(f => {
+            html += `<div class="folder-tree-item ${selectedTargetUuid === f.uuid ? 'selected' : ''}" style="padding-left: 20px" onclick="selectTarget('${f.uuid}')">📁 ${f.displayName}</div>`;
+          });
+          tree.innerHTML = html;
+        } catch (e) {
+          tree.innerHTML = "加载失败";
+        }
+      }
+
+      function selectTarget(uuid) {
+        selectedTargetUuid = uuid;
+        const items = document.querySelectorAll('.folder-tree-item');
+        items.forEach(item => {
+          item.classList.remove('selected');
+          if (item.getAttribute('onclick').includes(`'${uuid}'`)) item.classList.add('selected');
+        });
+      }
+
+      async function executeBatchMove() {
+        if (!selectedTargetUuid) return alert("请选择目标文件夹");
+        const selected = document.querySelectorAll(".item-checkbox:checked");
+        const fileIds = [];
+        const folderUuuids = [];
+        selected.forEach((cb) => {
+          if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
+          else folderUuuids.push(cb.dataset.uuid);
+        });
+        try {
+          const res = await fetch(`${API_BASE}/batch-move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileIds, folderUuuids, targetFolderUuid: selectedTargetUuid }),
+          });
+          if (res.ok) {
+            log("移动成功", "success");
+            closeMoveModal();
+            refresh();
+          } else {
+            const err = await res.json();
+            log(`移动失败: ${err.error || '未知错误'}`, "error");
+          }
+        } catch (e) { log("移动异常", "error"); }
+      }
+
       function createTaskItem(name) {
         activeTaskCount++;
         document.getElementById("uploadManager").style.display = "flex";
-        const id =
-          "task-" + Date.now() + Math.random().toString(36).substr(2, 5);
-        document
-          .getElementById("taskList")
-          .insertAdjacentHTML(
-            "afterbegin",
-            `<div class="task-item" id="${id}" data-done="false"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span class="task-name" title="${name}">${name}</span><span class="task-status" id="${id}-status">WAITING</span></div><div class="task-progress-bg"><div class="task-progress-bar" id="${id}-bar"></div></div></div>`,
-          );
+        const id = "task-" + Date.now() + Math.random().toString(36).substr(2, 5);
+        document.getElementById("taskList").insertAdjacentHTML("afterbegin", `<div class="task-item" id="${id}" data-done="false"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span class="task-name" title="${name}">${name}</span><span class="task-status" id="${id}-status">WAITING</span></div><div class="task-progress-bg"><div class="task-progress-bar" id="${id}-bar"></div></div></div>`);
         return id;
       }
 
@@ -796,54 +887,11 @@
         if (bar) bar.style.background = success ? "#5b8a72" : "#bc4749";
         activeTaskCount--;
         if (activeTaskCount <= 0) loadContent(currentFolderUuid);
-
-        setTimeout(() => {
-          closeManager();
-        }, 10000);
+        setTimeout(() => closeManager(), 10000);
       }
 
-      function clearCompleted() {
-        document
-          .querySelectorAll('.task-item[data-done="true"]')
-          .forEach((item) => item.remove());
-        // if (document.querySelectorAll(".task-item").length === 0)
-        // document.getElementById("uploadManager").style.display = "none";
-      }
-      function closeManager() {
-        document.getElementById("uploadManager").style.display = "none";
-      }
-
-      // Drag & Drop Logic
-      const dropOverlay = document.getElementById('dropOverlay');
-      let dragCounter = 0;
-
-      window.addEventListener('dragenter', (e) => {
-        e.preventDefault();
-        dragCounter++;
-        dropOverlay.classList.add('active');
-      });
-
-      window.addEventListener('dragover', (e) => {
-        e.preventDefault();
-      });
-
-      window.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dragCounter--;
-        if (dragCounter === 0) {
-          dropOverlay.classList.remove('active');
-        }
-      });
-
-      window.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dragCounter = 0;
-        dropOverlay.classList.remove('active');
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) {
-          uploadFiles(files);
-        }
-      });
+      function closeManager() { document.getElementById("uploadManager").style.display = "none"; }
+      function clearCompleted() { document.querySelectorAll('.task-item[data-done="true"]').forEach((item) => item.remove()); }
 
       async function uploadModeB() {
         const input = document.getElementById("fileInputB");
@@ -860,46 +908,25 @@
             const res = await fetch(`${API_BASE}/presigned/upload-url`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                filename: file.name,
-                mimetype: file.type || "application/octet-stream",
-                folderUuid: currentFolderUuid,
-              }),
+              body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", folderUuid: currentFolderUuid }),
             });
             const signData = await res.json();
-            
             const xhr = new XMLHttpRequest();
             xhr.open("PUT", signData.uploadUrl);
-            xhr.upload.onprogress = (e) => {
-              if (e.lengthComputable) {
-                const p = Math.floor((e.loaded / e.total) * 90);
-                updateTaskProgress(taskId, p, `上传中 ${p}%`);
-              }
-            };
-            
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable) { const p = Math.floor((e.loaded / e.total) * 90); updateTaskProgress(taskId, p, `上传中 ${p}%`); } };
             xhr.onload = async () => {
               if (xhr.status >= 200 && xhr.status < 300) {
                 await fetch(`${API_BASE}/presigned/callback`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    key: signData.key,
-                    originalName: file.name,
-                    mimetype: file.type || "application/octet-stream",
-                    size: file.size,
-                    folderUuid: currentFolderUuid,
-                  }),
+                  body: JSON.stringify({ key: signData.key, originalName: file.name, mimetype: file.type || "application/octet-stream", size: file.size, folderUuid: currentFolderUuid }),
                 });
                 completeTask(taskId, true);
-              } else {
-                completeTask(taskId, false);
-              }
+              } else completeTask(taskId, false);
             };
             xhr.onerror = () => completeTask(taskId, false);
             xhr.send(file);
-          } catch (e) {
-            completeTask(taskId, false);
-          }
+          } catch (e) { completeTask(taskId, false); }
         }
       }
 
@@ -908,15 +935,12 @@
         const files = Array.from(input.files);
         if (files.length === 0) return;
         const baseFolderUuid = currentFolderUuid;
-        const mainTaskId = createTaskItem(
-          `FOLDER: ${files[0].webkitRelativePath.split("/")[0]}`,
-        );
+        const mainTaskId = createTaskItem(`FOLDER: ${files[0].webkitRelativePath.split("/")[0]}`);
         const folderCache = { "": baseFolderUuid };
         try {
           for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const pathParts = file.webkitRelativePath.split("/");
-            const dirParts = pathParts.slice(0, -1);
+            const dirParts = file.webkitRelativePath.split("/").slice(0, -1);
             let lastParentUuid = baseFolderUuid;
             let currentPath = "";
             for (const part of dirParts) {
@@ -925,70 +949,29 @@
                 const res = await fetch(`${API_BASE}/folders`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: part,
-                    parentId: lastParentUuid === "root" ? null : lastParentUuid,
-                  }),
+                  body: JSON.stringify({ name: part, parentId: lastParentUuid === "root" ? null : lastParentUuid }),
                 });
                 const folder = await res.json();
                 folderCache[currentPath] = folder.uuid;
               }
               lastParentUuid = folderCache[currentPath];
             }
-            updateTaskProgress(
-              mainTaskId,
-              Math.floor((i / files.length) * 100),
-              `${i + 1}/${files.length}`,
-            );
-            const signRes = await fetch(`${API_BASE}/presigned/upload-url`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                filename: file.name,
-                mimetype: file.type || "application/octet-stream",
-                folderUuid: lastParentUuid,
-              }),
-            });
+            updateTaskProgress(mainTaskId, Math.floor((i / files.length) * 100), `${i + 1}/${files.length}`);
+            const signRes = await fetch(`${API_BASE}/presigned/upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", folderUuid: lastParentUuid }) });
             const signData = await signRes.json();
             await fetch(signData.uploadUrl, { method: "PUT", body: file });
-            await fetch(`${API_BASE}/presigned/callback`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                key: signData.key,
-                originalName: file.name,
-                mimetype: file.type || "application/octet-stream",
-                size: file.size,
-                folderUuid: lastParentUuid,
-              }),
-            });
+            await fetch(`${API_BASE}/presigned/callback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: signData.key, originalName: file.name, mimetype: file.type || "application/octet-stream", size: file.size, folderUuid: lastParentUuid }) });
           }
           completeTask(mainTaskId, true);
-        } catch (e) {
-          completeTask(mainTaskId, false);
-        } finally {
-          input.value = "";
-        }
+        } catch (e) { completeTask(mainTaskId, false); } finally { input.value = ""; }
       }
 
       function downloadFolder(uuid) {
         const taskId = createTaskItem("流式下载: 文件夹");
         updateTaskProgress(taskId, 30, "正在连接...");
-        log("正在准备流式下载，请稍候...", "info");
-
-        // 先完成 UI 状态，给予用户“已成功移交”的反馈
         setTimeout(() => {
-          updateTaskProgress(taskId, 100, "准备就绪");
           completeTask(taskId, true);
-          const statusEl = document.getElementById(`${taskId}-status`);
-          if (statusEl) statusEl.innerText = "已移交浏览器下载";
-
-          log("下载请求已移交浏览器，系统弹窗即将出现", "success");
-
-          // UI 更新完成后，延迟一小会儿再触发真正的系统下载弹窗
-          setTimeout(() => {
-            window.location.href = `${API_BASE}/folders/download/${uuid}`;
-          }, 500);
+          window.location.href = `${API_BASE}/folders/download/${uuid}`;
         }, 1200);
       }
       async function downloadModeB(id) {
@@ -996,29 +979,12 @@
         const data = await res.json();
         window.open(data.url, "_blank");
       }
-      async function deleteFile(id) {
-        if (confirm("确定移除此文件？")) {
-          await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
-          refresh();
-        }
-      }
-      async function deleteFolder(uuid) {
-        if (confirm("确定移除此文件夹及其内容？")) {
-          await fetch(`${API_BASE}/folders/${uuid}`, { method: "DELETE" });
-          refresh();
-        }
-      }
+      async function deleteFile(id) { if (confirm("确定移除此文件？")) { await fetch(`${API_BASE}/${id}`, { method: "DELETE" }); refresh(); } }
+      async function deleteFolder(uuid) { if (confirm("确定移除此文件夹及其内容？")) { await fetch(`${API_BASE}/folders/${uuid}`, { method: "DELETE" }); refresh(); } }
       async function promptCreateFolder() {
         const name = prompt("新建文件夹名称:");
         if (name) {
-          await fetch(`${API_BASE}/folders`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name,
-              parentId: currentFolderUuid === "root" ? null : currentFolderUuid,
-            }),
-          });
+          await fetch(`${API_BASE}/folders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, parentId: currentFolderUuid === "root" ? null : currentFolderUuid }) });
           refresh();
         }
       }
@@ -1029,13 +995,16 @@
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
       }
+
+      // Drag & Drop
+      const dropOverlay = document.getElementById('dropOverlay');
+      let dragCounter = 0;
+      window.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dropOverlay.classList.add('active'); });
+      window.addEventListener('dragover', (e) => e.preventDefault());
+      window.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter === 0) dropOverlay.classList.remove('active'); });
+      window.addEventListener('drop', (e) => { e.preventDefault(); dragCounter = 0; dropOverlay.classList.remove('active'); const files = Array.from(e.dataTransfer.files); if (files.length > 0) uploadFiles(files); });
+
       loadContent("root");
-      window.addEventListener("beforeunload", (e) => {
-        if (activeTaskCount > 0) {
-          e.preventDefault();
-          e.returnValue = "文件传输中，确认离开？";
-        }
-      });
     </script>
   </body>
 </html>

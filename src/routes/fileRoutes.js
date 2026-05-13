@@ -32,6 +32,7 @@ router.get("/presigned/download/:id", fileController.getDownloadUrl);
 
 // --- 批量操作 ---
 router.post("/batch-delete", fileController.batchDelete);
+router.post("/batch-move", fileController.batchMove);
 router.get("/batch-download", fileController.batchDownload);
 
 // --- 通用管理 ---

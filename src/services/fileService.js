@@ -44,8 +44,57 @@ class FileService {
     this.findFileByIdStmt = db.prepare("SELECT * FROM files WHERE id = ?");
     this.deleteFileStmt = db.prepare("DELETE FROM files WHERE id = ?");
     this.listAllStmt = db.prepare("SELECT * FROM files ORDER BY id DESC");
+    
+    // --- 3. 移动操作 SQL ---
+    this.updateFileFolderStmt = db.prepare("UPDATE files SET folderUuid = ? WHERE id = ?");
+    this.updateFolderParentStmt = db.prepare("UPDATE folders SET parentId = ? WHERE uuid = ?");
+    this.getAllSubFoldersStmt = db.prepare("SELECT uuid FROM folders WHERE parentId = ?");
 
     this.initBucket();
+  }
+
+  // ... (initBucket method)
+
+  // --- 移动操作 ---
+  async moveItems(fileIds = [], folderUuuids = [], targetFolderUuid) {
+    const targetUuid = targetFolderUuid === "root" ? null : targetFolderUuid;
+    const results = { files: 0, folders: 0 };
+
+    // 1. 移动文件
+    for (const id of fileIds) {
+      try {
+        this.updateFileFolderStmt.run(targetFolderUuid || "root", id);
+        results.files++;
+      } catch (e) {
+        console.error(`[Move Items] 文件 ${id} 移动失败:`, e.message);
+      }
+    }
+
+    // 2. 移动文件夹
+    for (const uuid of folderUuuids) {
+      try {
+        // 检查防止循环引用 (不能移入自身或其子目录)
+        if (targetUuid === uuid) continue;
+        if (targetUuid && this.isDescendant(uuid, targetUuid)) continue;
+
+        this.updateFolderParentStmt.run(targetUuid, uuid);
+        results.folders++;
+      } catch (e) {
+        console.error(`[Move Items] 文件夹 ${uuid} 移动失败:`, e.message);
+      }
+    }
+
+    return results;
+  }
+
+  // 递归检查 targetUuid 是否是 folderUuid 的子孙
+  isDescendant(folderUuid, targetUuid) {
+    const subFolders = this.getAllSubFoldersStmt.all(folderUuid);
+    for (const sub of subFolders) {
+      if (sub.uuid === targetUuid) return true;
+      if (this.isDescendant(sub.uuid, targetUuid)) return true;
+    }
+    return false;
   }
 
   async initBucket() {

@@ -174,6 +174,19 @@ exports.batchDelete = async (req, res) => {
   }
 };
 
+// 批量移动
+exports.batchMove = async (req, res) => {
+  try {
+    const { fileIds, folderUuuids, targetFolderUuid } = req.body;
+    if (!targetFolderUuid) return res.status(400).json({ error: "目标文件夹不能为空" });
+
+    const result = await fileService.moveItems(fileIds, folderUuuids, targetFolderUuid);
+    res.json({ message: "批量移动完成", data: result });
+  } catch (error) {
+    res.status(500).json({ error: "批量移动失败" });
+  }
+};
+
 // 批量下载
 exports.batchDownload = async (req, res) => {
   const abortController = new AbortController();
