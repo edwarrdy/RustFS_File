@@ -3,6 +3,7 @@ const { s3Client, publicS3Client, BUCKET_NAME } = require("../config/s3");
 const {
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   CreateBucketCommand,
@@ -11,6 +12,33 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const crypto = require("crypto");
 const path = require("path");
 const archiver = require("archiver");
+
+// Wait for each entry before fetching the next object, and propagate source errors.
+function appendZipEntry(archive, source, name, abortSignal) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      archive.removeListener("entry", onEntry);
+      archive.removeListener("error", onError);
+      source.removeListener("error", onError);
+      if (abortSignal) abortSignal.removeEventListener("abort", onAbort);
+    };
+    const onEntry = () => { cleanup(); resolve(); };
+    const onError = (error) => { cleanup(); source.destroy(); reject(error); };
+    const onAbort = () => onError(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+    archive.once("entry", onEntry);
+    archive.once("error", onError);
+    source.once("error", onError);
+    if (abortSignal) {
+      if (abortSignal.aborted) return onAbort();
+      abortSignal.addEventListener("abort", onAbort, { once: true });
+    }
+    try {
+      archive.append(source, { name });
+    } catch (error) {
+      onError(error);
+    }
+  });
+}
 
 class FileService {
   constructor() {
@@ -101,7 +129,9 @@ class FileService {
     try {
       await s3Client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME }));
     } catch (error) {
-      // 忽略 bucket 已存在错误
+      if (!["BucketAlreadyOwnedByYou", "BucketAlreadyExists"].includes(error.name)) {
+        console.error(`[Storage Init Error] 无法初始化存储桶 ${BUCKET_NAME}:`, error);
+      }
     }
   }
 
@@ -210,6 +240,12 @@ class FileService {
   async getPresignedDownloadUrl(id) {
     const fileRecord = this.findFileByIdStmt.get(id); // 同步查库
     if (!fileRecord) throw new Error("FILE_NOT_FOUND_DB");
+
+    // Signing alone does not verify that the bucket or object actually exists.
+    await s3Client.send(new HeadObjectCommand({
+      Bucket: fileRecord.bucket,
+      Key: fileRecord.uuidName,
+    }));
 
     // 2. 处理中文文件名 (RFC 5987 标准)
     // 格式: attachment; filename*=UTF-8''%E4%B8%AD%E6%96%87.txt
@@ -344,32 +380,11 @@ class FileService {
             Key: file.uuidName
           }), { abortSignal });
           
-          await new Promise((resolve, reject) => {
-            archive.append(response.Body, { name: path.join(relativePath, file.originalName) });
-            
-            const onEntry = () => { cleanup(); resolve(); };
-            const onError = (err) => { cleanup(); reject(err); };
-            const onAbort = () => { cleanup(); reject(new Error('Aborted')); };
-            
-            const cleanup = () => {
-                archive.removeListener('entry', onEntry);
-                archive.removeListener('error', onError);
-                if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
-            };
-            
-            if (abortSignal) {
-                if (abortSignal.aborted) {
-                    cleanup();
-                    return reject(new Error('Aborted'));
-                }
-                abortSignal.addEventListener('abort', onAbort);
-            }
-            archive.once('entry', onEntry);
-            archive.once('error', onError);
-          });
+          await appendZipEntry(archive, response.Body, path.posix.join(relativePath, file.originalName), abortSignal);
         } catch (err) {
           if (err.name === 'AbortError' || err.message === 'Aborted') throw err;
           console.error(`[Zip Error] 无法读取文件 ${file.originalName}:`, err.message);
+          throw err;
         }
       }
 
@@ -377,12 +392,12 @@ class FileService {
       const subFolders = this.listSubFoldersStmt.all(currentUuid);
       for (const folder of subFolders) {
         if (abortSignal && abortSignal.aborted) break;
-        await appendRecursive(folder.uuid, path.join(relativePath, folder.displayName));
+        await appendRecursive(folder.uuid, path.posix.join(relativePath, folder.displayName));
       }
     };
 
     // 开始递归处理 (后台运行)
-    (async () => {
+    setImmediate(async () => {
       try {
         await appendRecursive(folderUuid, "");
         if (!abortSignal || !abortSignal.aborted) {
@@ -390,10 +405,10 @@ class FileService {
         }
       } catch (e) {
         if (e.message !== 'Aborted' && e.name !== 'AbortError') {
-          archive.emit('error', e);
+          archive.destroy(e);
         }
       }
-    })();
+    });
 
     return { stream: archive, filename: rootFolder.displayName };
   }
@@ -439,6 +454,7 @@ class FileService {
       for (const id of fileIds) {
         if (abortSignal && abortSignal.aborted) break;
         const file = this.findFileByIdStmt.get(id);
+        if (!file) throw new Error("FILE_NOT_FOUND_DB");
         if (file) {
           try {
             const response = await s3Client.send(new GetObjectCommand({
@@ -446,27 +462,11 @@ class FileService {
               Key: file.uuidName
             }), { abortSignal });
 
-            await new Promise((resolve, reject) => {
-              archive.append(response.Body, { name: path.join(relativePath, file.originalName) });
-              
-              const onEntry = () => { cleanup(); resolve(); };
-              const onError = (err) => { cleanup(); reject(err); };
-              const onAbort = () => { cleanup(); reject(new Error('Aborted')); };
-              const cleanup = () => {
-                  archive.removeListener('entry', onEntry);
-                  archive.removeListener('error', onError);
-                  if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
-              };
-              if (abortSignal) {
-                  if (abortSignal.aborted) { cleanup(); return reject(new Error('Aborted')); }
-                  abortSignal.addEventListener('abort', onAbort);
-              }
-              archive.once('entry', onEntry);
-              archive.once('error', onError);
-            });
+            await appendZipEntry(archive, response.Body, path.posix.join(relativePath, file.originalName), abortSignal);
           } catch (err) {
             if (err.name === 'AbortError' || err.message === 'Aborted') throw err;
             console.error(`[Batch Zip Error] 无法读取文件 ${file.originalName}:`, err.message);
+            throw err;
           }
         }
       }
@@ -475,8 +475,9 @@ class FileService {
       for (const uuid of folderUuuids) {
         if (abortSignal && abortSignal.aborted) break;
         const folder = this.findFolderByUuidStmt.get(uuid);
+        if (!folder) throw new Error("FOLDER_NOT_FOUND");
         if (folder) {
-          const innerPath = path.join(relativePath, folder.displayName);
+          const innerPath = path.posix.join(relativePath, folder.displayName);
           
           const files = this.listFilesByFolderStmt.all(uuid);
           for (const f of files) {
@@ -487,27 +488,11 @@ class FileService {
                 Key: f.uuidName
               }), { abortSignal });
 
-              await new Promise((resolve, reject) => {
-                archive.append(response.Body, { name: path.join(innerPath, f.originalName) });
-                
-                const onEntry = () => { cleanup(); resolve(); };
-                const onError = (err) => { cleanup(); reject(err); };
-                const onAbort = () => { cleanup(); reject(new Error('Aborted')); };
-                const cleanup = () => {
-                    archive.removeListener('entry', onEntry);
-                    archive.removeListener('error', onError);
-                    if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
-                };
-                if (abortSignal) {
-                    if (abortSignal.aborted) { cleanup(); return reject(new Error('Aborted')); }
-                    abortSignal.addEventListener('abort', onAbort);
-                }
-                archive.once('entry', onEntry);
-                archive.once('error', onError);
-              });
+              await appendZipEntry(archive, response.Body, path.posix.join(innerPath, f.originalName), abortSignal);
             } catch (err) {
               if (err.name === 'AbortError' || err.message === 'Aborted') throw err;
               console.error(`[Batch Zip Error] 无法读取文件 ${f.originalName}:`, err.message);
+              throw err;
             }
           }
 
@@ -519,7 +504,7 @@ class FileService {
       }
     };
 
-    (async () => {
+    setImmediate(async () => {
       try {
         await appendItemsRecursive(fileIds, folderUuuids);
         if (!abortSignal || !abortSignal.aborted) {
@@ -527,10 +512,10 @@ class FileService {
         }
       } catch (e) {
         if (e.message !== 'Aborted' && e.name !== 'AbortError') {
-          archive.emit('error', e);
+          archive.destroy(e);
         }
       }
-    })();
+    });
 
     return archive;
   }

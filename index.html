@@ -781,7 +781,7 @@
         }
       }
 
-      function batchDownload() {
+      async function batchDownload() {
         const selected = document.querySelectorAll(".item-checkbox:checked");
         if (selected.length === 0) return;
         const taskId = createTaskItem(`批量打包 (${selected.length}个项目)`);
@@ -792,14 +792,13 @@
           if (cb.dataset.type === "file") fileIds.push(parseInt(cb.dataset.id));
           else folderUuuids.push(cb.dataset.uuid);
         });
-        setTimeout(() => {
-          window.location.href = `${API_BASE}/batch-download?fileIds=${JSON.stringify(fileIds)}&folderUuuids=${JSON.stringify(folderUuuids)}`;
-          updateTaskProgress(taskId, 80, "正在传输...");
+        const query = new URLSearchParams({
+          fileIds: JSON.stringify(fileIds),
+          folderUuuids: JSON.stringify(folderUuuids),
+        });
+        if (await downloadZip(`${API_BASE}/batch-download?${query}`, taskId, "batch_download.zip")) {
           unselectAll();
-          setTimeout(() => {
-            completeTask(taskId, true);
-          }, 3000);
-        }, 500);
+        }
       }
 
       async function openMoveModal() {
@@ -879,14 +878,14 @@
         if (statusEl && status) statusEl.innerText = status;
       }
 
-      function completeTask(id, success = true) {
+      function completeTask(id, success = true, refreshContent = true) {
         const item = document.getElementById(id);
         if (item) item.setAttribute("data-done", "true");
         updateTaskProgress(id, 100, success ? "DONE" : "FAILED");
         const bar = document.getElementById(`${id}-bar`);
         if (bar) bar.style.background = success ? "#5b8a72" : "#bc4749";
         activeTaskCount--;
-        if (activeTaskCount <= 0) loadContent(currentFolderUuid);
+        if (activeTaskCount <= 0 && refreshContent) loadContent(currentFolderUuid);
         setTimeout(() => closeManager(), 10000);
       }
 
@@ -966,18 +965,80 @@
         } catch (e) { completeTask(mainTaskId, false); } finally { input.value = ""; }
       }
 
-      function downloadFolder(uuid) {
+      async function downloadZip(url, taskId, fallbackName) {
+        let writable;
+        try {
+          // Stream large archives directly to disk where the browser supports it.
+          const fileHandle = window.showSaveFilePicker
+            ? await window.showSaveFilePicker({
+                suggestedName: fallbackName,
+                types: [{ description: "ZIP 压缩包", accept: { "application/zip": [".zip"] } }],
+              })
+            : null;
+          const res = await fetch(url);
+          const contentType = (res.headers.get("Content-Type") || "").toLowerCase();
+          if (!res.ok || !contentType.includes("application/zip")) {
+            let message = `下载失败 (HTTP ${res.status})`;
+            if (contentType.includes("json")) {
+              const data = await res.json();
+              message = data.error || message;
+            } else {
+              const body = await res.text();
+              if (/<Code>\s*NoSuchBucket\s*<\/Code>/.test(body)) {
+                message = "存储桶不存在，请检查下载请求是否指向 API 服务，以及 RustFS 端点和文件所属 bucket 配置";
+              } else if (res.ok) {
+                message = "下载接口未返回 ZIP 文件，请检查 API 地址或反向代理配置";
+              }
+            }
+            throw new Error(message);
+          }
+          updateTaskProgress(taskId, 50, "正在接收 ZIP...");
+          const disposition = res.headers.get("Content-Disposition") || "";
+          const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+          const filename = fileHandle ? fileHandle.name : filenameMatch ? decodeURIComponent(filenameMatch[1]) : fallbackName;
+          if (fileHandle) {
+            writable = await fileHandle.createWritable();
+            await res.body.pipeTo(writable);
+            writable = null;
+          } else {
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = objectUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+          }
+          completeTask(taskId, true, false);
+          log(`ZIP 已接收并提交浏览器保存: ${filename}`, "success");
+          return true;
+        } catch (error) {
+          if (writable) {
+            try { await writable.abort(); } catch (abortError) {}
+          }
+          completeTask(taskId, false, false);
+          updateTaskProgress(taskId, 0, error.name === "AbortError" ? "已取消" : "下载失败");
+          log(error.name === "AbortError" ? "已取消下载" : error.message || "下载连接中断，请重试", "error");
+          return false;
+        }
+      }
+
+      async function downloadFolder(uuid) {
         const taskId = createTaskItem("流式下载: 文件夹");
         updateTaskProgress(taskId, 30, "正在连接...");
-        setTimeout(() => {
-          completeTask(taskId, true);
-          window.location.href = `${API_BASE}/folders/download/${uuid}`;
-        }, 1200);
+        await downloadZip(`${API_BASE}/folders/download/${encodeURIComponent(uuid)}`, taskId, "folder.zip");
       }
       async function downloadModeB(id) {
-        const res = await fetch(`${API_BASE}/presigned/download/${id}`);
-        const data = await res.json();
-        window.open(data.url, "_blank");
+        try {
+          const res = await fetch(`${API_BASE}/presigned/download/${id}`);
+          const data = await res.json();
+          if (!res.ok || !data.url) throw new Error(data.error || "获取下载链接失败");
+          window.open(data.url, "_blank");
+        } catch (error) {
+          log(error.message || "下载失败，请检查存储服务", "error");
+        }
       }
       async function deleteFile(id) { if (confirm("确定移除此文件？")) { await fetch(`${API_BASE}/${id}`, { method: "DELETE" }); refresh(); } }
       async function deleteFolder(uuid) { if (confirm("确定移除此文件夹及其内容？")) { await fetch(`${API_BASE}/folders/${uuid}`, { method: "DELETE" }); refresh(); } }

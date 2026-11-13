@@ -23,7 +23,7 @@ const PORT = config.port;
 // --- 1. 全局中间件 ---
 
 // 允许跨域 (CORS)
-app.use(cors());
+app.use(cors({ exposedHeaders: ["Content-Disposition"] }));
 
 // 解析 JSON 请求体
 app.use(express.json());

@@ -1,5 +1,50 @@
 const fileService = require("../services/fileService");
 
+// Keep storage failures inside the API instead of returning an incomplete ZIP.
+async function sendZipDownload(res, createArchive, filename) {
+  const abortController = new AbortController();
+  let archive;
+  const abort = () => {
+    abortController.abort();
+    if (archive) {
+      archive.abort();
+      archive.destroy();
+    }
+  };
+  res.once("close", () => { if (!res.writableFinished) abort(); });
+  res.once("error", abort);
+
+  const fail = (error) => {
+    console.error("[ZIP Download Error]", error);
+    if (archive) archive.unpipe(res);
+    abort();
+    if (res.destroyed) return;
+    if (res.headersSent) return res.destroy();
+    res.removeHeader("Content-Disposition");
+    res.removeHeader("Content-Type");
+    if (error.name === "NoSuchBucket" || error.Code === "NoSuchBucket" || error.code === "NoSuchBucket") {
+      return res.status(502).json({ error: "存储桶不存在，请检查 RustFS 端点及文件记录中的 bucket 是否与实际存储一致" });
+    }
+    if (error.name === "NoSuchKey" || error.message.includes("NOT_FOUND")) {
+      return res.status(404).json({ error: "文件或文件夹不存在" });
+    }
+    res.status(500).json({ error: "打包下载失败，请检查存储服务或重试" });
+  };
+
+  try {
+    const result = await createArchive(abortController.signal);
+    archive = result.stream;
+    archive.once("error", fail);
+    if (abortController.signal.aborted) return abort();
+    const downloadName = result.filename || filename;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
+    archive.pipe(res);
+  } catch (error) {
+    fail(error);
+  }
+}
+
 // --- 文件夹管理 ---
 
 // 创建文件夹
@@ -124,43 +169,23 @@ exports.getDownloadUrl = async (req, res) => {
     );
     res.json({ url, filename });
   } catch (error) {
-    res.status(500).json({ error: "获取链接失败" });
+    console.error("[Download URL Error]", error);
+    if (error.name === "NoSuchBucket" || error.Code === "NoSuchBucket" || error.code === "NoSuchBucket") {
+      return res.status(502).json({ error: "存储桶不存在，请检查 RustFS 存储数据和 bucket 配置" });
+    }
+    if (error.name === "NoSuchKey" || error.name === "NotFound" || error.message.includes("NOT_FOUND")) {
+      return res.status(404).json({ error: "文件不存在" });
+    }
+    res.status(502).json({ error: "无法确认文件是否可下载，请检查存储服务连接和权限" });
   }
 };
 
 // --- 文件夹下载 (ZIP) ---
 exports.downloadFolder = async (req, res) => {
-  const abortController = new AbortController();
-  let archiveRef = null;
-
-  try {
-    const { uuid } = req.params;
-    const { stream, filename } = await fileService.getFolderZipStream(uuid, abortController.signal);
-    archiveRef = stream;
-
-    res.setHeader("Content-Type", "application/zip");
-    const encodedName = encodeURIComponent(filename + ".zip");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename*=UTF-8''${encodedName}`,
-    );
-
-    const cleanup = () => {
-      if (!res.writableFinished) {
-        console.log(`[Download] 客户端连接断开，中止打包: ${filename}`);
-        abortController.abort();
-        try { if (archiveRef) archiveRef.abort(); } catch(e) {}
-      }
-    };
-
-    res.on("close", cleanup);
-    res.on("error", cleanup);
-
-    stream.pipe(res);
-  } catch (error) {
-    console.error("[Download Folder Error]", error);
-    if (!res.headersSent) res.status(500).send("下载文件夹失败");
-  }
+  await sendZipDownload(res, async (signal) => {
+    const { stream, filename } = await fileService.getFolderZipStream(req.params.uuid, signal);
+    return { stream, filename: filename + ".zip" };
+  });
 };
 
 // 批量删除
@@ -189,41 +214,24 @@ exports.batchMove = async (req, res) => {
 
 // 批量下载
 exports.batchDownload = async (req, res) => {
-  const abortController = new AbortController();
-  let archiveRef = null;
-
+  let fileIds;
+  let folderUuuids;
   try {
-    const { fileIds, folderUuuids } = req.query;
-    const fIds = fileIds ? JSON.parse(fileIds) : [];
-    const fUuuids = folderUuuids ? JSON.parse(folderUuuids) : [];
-
-    const stream = await fileService.getBatchZipStream(fIds, fUuuids, abortController.signal);
-    archiveRef = stream;
-
-    res.setHeader("Content-Type", "application/zip");
-    const filename = `batch_download_${Date.now()}.zip`;
-    const encodedName = encodeURIComponent(filename);
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename*=UTF-8''${encodedName}`,
-    );
-
-    const cleanup = () => {
-      if (!res.writableFinished) {
-        console.log(`[Batch Download] 客户端连接断开，中止批量打包...`);
-        abortController.abort();
-        try { if (archiveRef) archiveRef.abort(); } catch(e) {}
-      }
-    };
-
-    res.on("close", cleanup);
-    res.on("error", cleanup);
-
-    stream.pipe(res);
+    fileIds = req.query.fileIds ? JSON.parse(req.query.fileIds) : [];
+    folderUuuids = req.query.folderUuuids ? JSON.parse(req.query.folderUuuids) : [];
+    if (!Array.isArray(fileIds) || !Array.isArray(folderUuuids) ||
+        !fileIds.every(id => Number.isSafeInteger(id) && id > 0) ||
+        !folderUuuids.every(uuid => typeof uuid === "string" && uuid.trim().length > 0) ||
+        fileIds.length + folderUuuids.length === 0) {
+      throw new Error("INVALID_SELECTION");
+    }
   } catch (error) {
-    console.error("[Batch Download Error]", error);
-    if (!res.headersSent) res.status(500).send("批量下载失败");
+    return res.status(400).json({ error: "请选择有效的文件或文件夹，下载参数必须为 JSON 数组" });
   }
+
+  await sendZipDownload(res, async (signal) => ({
+    stream: await fileService.getBatchZipStream(fileIds, folderUuuids, signal),
+  }), `batch_download_${Date.now()}.zip`);
 };
 
 exports.getBreadcrumbs = async (req, res) => {
